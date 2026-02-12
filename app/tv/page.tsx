@@ -37,22 +37,46 @@ function TVContent() {
     const keywords = [
       { key: 'YELLOW MAIZE', label: 'Yellow Maize', symbol: 'YM', color: '#ffaa00' },
       { key: 'WHITE MAIZE', label: 'White Maize', symbol: 'WM', color: '#ffffff' },
-      { key: 'SOYA BEAN', label: 'Soya Bean', symbol: 'SB', color: '#38bdf8' },
+      { key: 'SOYA BEAN', label: 'Soybean', symbol: 'SB', color: '#38bdf8' },
       { key: 'RICE', label: 'Rice', symbol: 'MR', color: '#4ade80' },
       { key: 'SESAME', label: 'Sesame', symbol: 'SS', color: '#f472b6' },
       { key: 'SORGHUM', label: 'Sorghum', symbol: 'SR', color: '#fbbf24' }
     ]
 
     return keywords.map(kw => {
-      const match = commodities.find(c => c.commodity.toUpperCase().includes(kw.key))
+      const matches = commodities.filter(c => c.commodity.toUpperCase().includes(kw.key))
+      const count = matches.length
+      const avgPrice = count > 0
+        ? matches.reduce((sum, c) => sum + c.price, 0) / count
+        : 0
+      const avgChange = count > 0
+        ? matches.reduce((sum, c) => sum + c.changePercent, 0) / count
+        : 0
+
+      const basePrice = avgPrice
+      const change = avgChange
+
+      // Generate more stable historical data for sparkline
+      const history = Array.from({ length: 12 }).map((_, i) => {
+        const progress = i / 11
+        const variance = basePrice * 0.02 * Math.sin(progress * Math.PI)
+        const noise = (Math.random() - 0.5) * (basePrice * 0.01)
+        const value = basePrice > 0
+          ? basePrice * (0.99 + (change / 200)) + variance + noise
+          : 4000 + Math.random() * 500
+
+        return {
+          time: i,
+          value: parseFloat(value.toFixed(2))
+        }
+      })
+
       return {
         ...kw,
-        price: match ? match.price : 0,
-        change: match ? match.changePercent : 0,
-        history: Array.from({length: 12}).map((_, i) => ({
-          time: i,
-          value: (match ? match.price * (0.95 + Math.random() * 0.1) : 4000 + Math.random() * 1000)
-        }))
+        label: `${kw.label} (${count})`,
+        price: basePrice,
+        change: change,
+        history
       }
     })
   }, [commodities])

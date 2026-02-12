@@ -1,26 +1,26 @@
 ﻿'use client'
 import { useEffect, useState, useMemo } from 'react'
-import { 
-  GripHorizontal, 
-  X, 
-  Search, 
-  LayoutDashboard, 
-  Activity, 
-  BarChart3, 
+import {
+  GripHorizontal,
+  X,
+  Search,
+  LayoutDashboard,
+  Activity,
+  BarChart3,
   List,
   MapPin,
   Clock,
   ArrowUpRight,
   ArrowDownRight
 } from 'lucide-react'
-import { 
-  Area, 
-  AreaChart, 
-  ResponsiveContainer, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
+import {
+  Area,
+  AreaChart,
+  ResponsiveContainer,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
   ReferenceLine
 } from 'recharts'
 import { useTheme } from 'next-themes'
@@ -50,23 +50,39 @@ interface Widget {
   y: number
 }
 
-const generateHistoricalData = (basePrice: number, high: number, low: number, days = 30) => {
+const generateHistoricalData = (basePrice: number, high: number, low: number, openingPrice: number, points = 30) => {
   const data = []
-  const startPrice = basePrice * (0.95 + Math.random() * 0.1)
+
+  if (high === low && high === basePrice) {
+    for (let i = 0; i < points; i++) {
+      data.push({
+        time: i,
+        price: basePrice,
+        high: high,
+        low: low
+      })
+    }
+    return data
+  }
+
+  const startPrice = openingPrice || basePrice * (0.99 + Math.random() * 0.02)
   let currentPrice = startPrice
-  
-  for (let i = 0; i < days; i++) {
-    const progress = i / days
+
+  for (let i = 0; i < points; i++) {
+    const progress = i / (points - 1)
     const trend = (basePrice - startPrice) * progress
-    const noise = (Math.random() - 0.5) * (basePrice * 0.02)
-    currentPrice = startPrice + trend + noise
-    const dayHigh = Math.max(currentPrice * 1.01, high || currentPrice)
-    const dayLow = Math.min(currentPrice * 0.99, low || currentPrice)
+    const variance = (high - low) * 0.2 * Math.sin(progress * Math.PI)
+    const noise = (Math.random() - 0.5) * ((high - low) || (basePrice * 0.01))
+
+    currentPrice = startPrice + trend + variance + noise
+    currentPrice = Math.max(low, Math.min(high, currentPrice))
+    if (i === points - 1) currentPrice = basePrice
+
     data.push({
-      date: new Date(Date.now() - (days - i) * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      price: i === days - 1 ? basePrice : parseFloat(currentPrice.toFixed(2)),
-      high: parseFloat(dayHigh.toFixed(2)),
-      low: parseFloat(dayLow.toFixed(2))
+      time: i,
+      price: parseFloat(currentPrice.toFixed(2)),
+      high: parseFloat(high.toFixed(2)),
+      low: parseFloat(low.toFixed(2))
     })
   }
   return data
@@ -98,7 +114,13 @@ function PriceCard({ commodity }: { commodity: Commodity }) {
           <div className="space-y-1">
             <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">Day Range</div>
             <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden relative">
-              <div className="absolute h-full bg-foreground/30" style={{ left: '20%', right: '30%' }} />
+              <div
+                className="absolute h-full bg-[#ffaa00]/30"
+                style={{
+                  left: `${((commodity.lowPrice - (commodity.price * 0.8)) / (commodity.price * 0.4)) * 100}%`,
+                  right: `${(1 - (commodity.highPrice - (commodity.price * 0.8)) / (commodity.price * 0.4)) * 100}%`
+                }}
+              />
             </div>
             <div className="flex justify-between text-[10px] font-mono text-muted-foreground">
               <span>{commodity.lowPrice.toLocaleString()}</span>
@@ -110,7 +132,7 @@ function PriceCard({ commodity }: { commodity: Commodity }) {
             <div className="text-xs font-bold text-foreground/80">Grade {commodity.grade}</div>
           </div>
         </div>
-        
+
         <div className="pt-3 border-t border-border flex items-center justify-between">
           <div className="flex items-center gap-1.5 text-muted-foreground">
             <MapPin size={12} />
@@ -126,8 +148,27 @@ function PriceCard({ commodity }: { commodity: Commodity }) {
   )
 }
 
-function MainChart({ commodity }: { commodity: Commodity }) {
-  const data = useMemo(() => generateHistoricalData(commodity.price, commodity.highPrice, commodity.lowPrice), [commodity.symbol, commodity.price, commodity.highPrice, commodity.lowPrice])
+function MainChart({ commodity, title }: { commodity: Commodity, title: string }) {
+  const [range, setRange] = useState('1M')
+
+  const points = useMemo(() => {
+    switch (range) {
+      case '1D': return 12
+      case '5D': return 24
+      case '1M': return 30
+      case '3M': return 60
+      case '6M': return 90
+      case 'YTD': return 45
+      case '1Y': return 120
+      default: return 30
+    }
+  }, [range])
+
+  const data = useMemo(() =>
+    generateHistoricalData(commodity.price, commodity.highPrice, commodity.lowPrice, commodity.openingPrice, points),
+    [commodity.symbol, commodity.price, commodity.highPrice, commodity.lowPrice, commodity.openingPrice, points]
+  )
+
   const { theme } = useTheme()
   const gridColor = theme === 'dark' ? '#222' : '#eee'
   const axisColor = theme === 'dark' ? '#444' : '#999'
@@ -135,46 +176,62 @@ function MainChart({ commodity }: { commodity: Commodity }) {
   return (
     <div className="h-full w-full flex flex-col">
       <div className="flex items-center justify-between mb-4">
-        <div className="flex gap-2">
-          {['1D', '5D', '1M', '3M', '6M', 'YTD', '1Y'].map((range) => (
-            <button 
-              key={range} 
-              className={`text-[10px] font-bold px-2 py-1 rounded transition ${range === '1M' ? 'bg-[#ffaa00] text-black' : 'text-muted-foreground hover:text-foreground'}`}
+        <div className="flex gap-1.5">
+          {['1D', '5D', '1M', '3M', '6M', 'YTD', '1Y'].map((r) => (
+            <button
+              key={r}
+              onClick={() => setRange(r)}
+              className={`text-[9px] font-black px-2 py-1 rounded transition border ${r === range
+                ? 'bg-[#ffaa00] border-[#ffaa00] text-black shadow-[0_0_10px_rgba(255,170,0,0.3)]'
+                : 'text-muted-foreground border-transparent hover:border-border hover:bg-muted font-bold'
+                }`}
             >
-              {range}
+              {r}
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-4 text-[10px] font-mono text-muted-foreground">
-          <div>O: <span className="text-foreground">{commodity.openingPrice?.toLocaleString()}</span></div>
-          <div>H: <span className="text-foreground">{commodity.highPrice?.toLocaleString()}</span></div>
-          <div>L: <span className="text-foreground">{commodity.lowPrice?.toLocaleString()}</span></div>
-          <div>C: <span className="text-foreground">{commodity.closePrice?.toLocaleString()}</span></div>
+        <div className="flex items-center gap-3 text-[10px] font-mono text-muted-foreground border-l border-border pl-3">
+          <div className="flex flex-col"><span className="text-[8px] opacity-50">OPEN</span><span className="text-foreground font-bold">{commodity.openingPrice?.toLocaleString()}</span></div>
+          <div className="flex flex-col"><span className="text-[8px] opacity-50">HIGH</span><span className="text-foreground font-bold">{commodity.highPrice?.toLocaleString()}</span></div>
+          <div className="flex flex-col"><span className="text-[8px] opacity-50">LOW</span><span className="text-foreground font-bold">{commodity.lowPrice?.toLocaleString()}</span></div>
+          <div className="flex flex-col"><span className="text-[8px] opacity-50">LAST</span><span className="text-foreground font-bold">{commodity.closePrice?.toLocaleString()}</span></div>
         </div>
       </div>
-      
+
       <div className="flex-1 min-h-0">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
             <defs>
               <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#ffaa00" stopOpacity={0.15}/>
-                <stop offset="95%" stopColor="#ffaa00" stopOpacity={0}/>
+                <stop offset="5%" stopColor="#ffaa00" stopOpacity={0.2} />
+                <stop offset="95%" stopColor="#ffaa00" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
-            <XAxis dataKey="date" stroke={axisColor} fontSize={10} tickLine={false} axisLine={false} padding={{ left: 10, right: 10 }} />
-            <YAxis stroke={axisColor} fontSize={10} tickLine={false} axisLine={false} domain={['auto', 'auto']} />
-            <Tooltip 
-              contentStyle={{ backgroundColor: theme === 'dark' ? '#000' : '#fff', border: '1px solid var(--border)', borderRadius: '4px', padding: '8px' }}
+            <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} opacity={0.5} />
+            <XAxis dataKey="time" hide />
+            <YAxis stroke={axisColor} fontSize={10} tickLine={false} axisLine={false} domain={['auto', 'auto']} tickFormatter={(v) => v.toLocaleString()} />
+            <Tooltip
+              contentStyle={{ backgroundColor: theme === 'dark' ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.8)', border: '1px solid var(--border)', borderRadius: '6px', padding: '8px', backdropFilter: 'blur(4px)' }}
               itemStyle={{ color: '#ffaa00', fontSize: '11px', fontWeight: 'bold' }}
-              labelStyle={{ color: 'var(--muted-foreground)', fontSize: '10px', marginBottom: '4px' }}
-              cursor={{ stroke: axisColor, strokeWidth: 1 }}
+              labelStyle={{ display: 'none' }}
+              cursor={{ stroke: '#ffaa00', strokeWidth: 1, strokeDasharray: '3 3' }}
+              formatter={(value: any) => [`GHC ${value.toLocaleString()}`, 'Price']}
             />
-            <Area type="monotone" dataKey="price" stroke="#ffaa00" strokeWidth={2} fillOpacity={1} fill="url(#chartGradient)" animationDuration={1000} />
+            <Area
+              type="monotone"
+              dataKey="price"
+              stroke="#ffaa00"
+              strokeWidth={2.5}
+              fillOpacity={1}
+              fill="url(#chartGradient)"
+              animationDuration={800}
+            />
             <ReferenceLine y={commodity.openingPrice} stroke={axisColor} strokeDasharray="3 3" label={{ value: 'OPEN', position: 'right', fill: axisColor, fontSize: 10 }} />
           </AreaChart>
         </ResponsiveContainer>
+      </div>
+      <div className="text-center text-[8px] font-black text-muted-foreground uppercase tracking-widest mt-2 border-t border-border pt-1">
+        Trend Analysis for {range} Period
       </div>
     </div>
   )
@@ -182,44 +239,73 @@ function MainChart({ commodity }: { commodity: Commodity }) {
 
 function Watchlist({ commodities, activeSymbol, onSelect }: { commodities: Commodity[], activeSymbol: string, onSelect: (sym: string) => void }) {
   const [search, setSearch] = useState('')
-  const filtered = commodities.filter(c => c.symbol.toLowerCase().includes(search.toLowerCase()) || c.commodity.toLowerCase().includes(search.toLowerCase()))
+  const [limit, setLimit] = useState(15)
+
+  const filtered = useMemo(() => {
+    return commodities.filter(c => c.symbol.toLowerCase().includes(search.toLowerCase()) || c.commodity.toLowerCase().includes(search.toLowerCase()))
+  }, [commodities, search])
+
+  const displayed = useMemo(() => filtered.slice(0, limit), [filtered, limit])
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget
+    if (scrollHeight - scrollTop <= clientHeight + 100) {
+      if (limit < filtered.length) {
+        setLimit(prev => prev + 15)
+      }
+    }
+  }
+
+  useEffect(() => {
+    setLimit(15)
+  }, [search])
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="relative mb-4" data-no-drag>
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={14} />
-        <input 
-          type="text" 
-          placeholder="Symbol or Commodity..." 
-          className="w-full bg-muted/50 border border-border rounded py-1.5 pl-9 pr-3 text-xs focus:outline-none focus:border-foreground/30 transition text-foreground"
+    <div className="h-full flex flex-col overflow-hidden">
+      <div className="relative mb-3 flex-shrink-0" data-no-drag>
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={12} />
+        <input
+          type="text"
+          placeholder="Filter Symbol..."
+          className="w-full bg-muted/50 border border-border rounded-md py-1.5 pl-8 pr-3 text-[10px] focus:outline-none focus:border-[#ffaa00]/50 transition text-foreground"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
       </div>
-      <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-1" data-no-drag>
-        <div className="grid grid-cols-12 px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase">
+      <div
+        className="flex-1 overflow-y-auto custom-scrollbar pr-1"
+        data-no-drag
+        onScroll={handleScroll}
+      >
+        <div className="grid grid-cols-12 px-2 py-1 text-[9px] font-black text-muted-foreground uppercase sticky top-0 bg-card z-10 border-b border-border/50">
           <div className="col-span-4">Symbol</div>
           <div className="col-span-4 text-right">Price</div>
-          <div className="col-span-4 text-right">Change %</div>
+          <div className="col-span-4 text-right">CHG%</div>
         </div>
-        {filtered.map(item => (
-          <button 
-            key={item.symbol} 
-            onClick={() => onSelect(item.symbol)}
-            className={`w-full grid grid-cols-12 px-2 py-3 rounded text-left transition group ${
-              activeSymbol === item.symbol ? 'bg-muted border-l-2 border-[#ffaa00]' : 'hover:bg-muted/50 border-l-2 border-transparent'
-            }`}
-          >
-            <div className="col-span-4 flex flex-col">
-              <span className="text-xs font-black group-hover:text-[#ffaa00] transition text-foreground">{item.symbol}</span>
-              <span className="text-[10px] text-muted-foreground truncate">{item.commodity}</span>
+        <div className="divide-y divide-border/30">
+          {displayed.map(item => (
+            <button
+              key={item.symbol}
+              onClick={() => onSelect(item.symbol)}
+              className={`w-full grid grid-cols-12 px-2 py-2 text-left transition group border-l-2 ${activeSymbol === item.symbol ? 'bg-[#ffaa00]/10 border-[#ffaa00]' : 'hover:bg-muted/50 border-transparent'
+                }`}
+            >
+              <div className="col-span-4 flex flex-col">
+                <span className="text-[11px] font-black group-hover:text-[#ffaa00] transition text-foreground tracking-tighter">{item.symbol}</span>
+                <span className="text-[9px] text-muted-foreground truncate opacity-70">{item.commodity}</span>
+              </div>
+              <div className="col-span-4 text-right text-[11px] font-mono font-bold self-center text-foreground">{item.price.toLocaleString()}</div>
+              <div className={`col-span-4 text-right text-[10px] font-black self-center ${item.changePercent >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                {item.changePercent >= 0 ? '▲' : '▼'}{Math.abs(item.changePercent).toFixed(2)}%
+              </div>
+            </button>
+          ))}
+          {limit < filtered.length && (
+            <div className="py-4 text-center text-[9px] font-bold text-muted-foreground uppercase tracking-widest animate-pulse">
+              Scroll for more
             </div>
-            <div className="col-span-4 text-right text-xs font-mono font-bold mt-1 text-foreground">GHC {item.price.toLocaleString()}</div>
-            <div className={`col-span-4 text-right text-xs font-bold mt-1 ${item.changePercent >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-              {item.changePercent >= 0 ? '+' : ''}{item.changePercent.toFixed(2)}%
-            </div>
-          </button>
-        ))}
+          )}
+        </div>
       </div>
     </div>
   )
@@ -228,15 +314,16 @@ function Watchlist({ commodities, activeSymbol, onSelect }: { commodities: Commo
 function SummaryStats({ commodities }: { commodities: Commodity[] }) {
   const activeCount = commodities.length
   const totalGainers = commodities.filter(c => c.changePercent > 0).length
-  const avgPrice = commodities.reduce((s, c) => s + c.price, 0) / activeCount
-  
+  const avgPrice = activeCount > 0 ? commodities.reduce((s, c) => s + c.price, 0) / activeCount : 0
+  const avgChange = activeCount > 0 ? commodities.reduce((s, c) => s + c.changePercent, 0) / activeCount : 0
+
   return (
     <div className="h-full grid grid-cols-1 gap-4 overflow-y-auto custom-scrollbar">
       {[
         { label: 'Active Listings', value: activeCount, color: 'text-muted-foreground', bg: 'bg-muted/20' },
-        { label: 'Market Sentiment', value: `${((totalGainers / activeCount) * 100).toFixed(0)}% Bullish`, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-        { label: 'Index Average', value: `${avgPrice.toFixed(2)}`, color: 'text-[#ffaa00]', bg: 'bg-amber-500/10' },
-        { label: 'Total Volume (24h)', value: '12,450,200', color: 'text-muted-foreground', bg: 'bg-muted/20' }
+        { label: 'Market Sentiment', value: `${activeCount > 0 ? ((totalGainers / activeCount) * 100).toFixed(0) : 0}% Bullish`, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+        { label: 'Average Price', value: `GHC ${avgPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}`, color: 'text-[#ffaa00]', bg: 'bg-amber-500/10' },
+        { label: 'Avg Market Change', value: `${avgChange >= 0 ? '+' : ''}${avgChange.toFixed(2)}%`, color: avgChange >= 0 ? 'text-emerald-500' : 'text-rose-500', bg: 'bg-muted/20' }
       ].map((stat, i) => (
         <div key={i} className={`${stat.bg} border border-border p-4 rounded-lg flex flex-col justify-between`}>
           <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{stat.label}</div>
@@ -270,7 +357,7 @@ export default function Dashboard() {
               { id: 'w2', type: 'chart', title: 'Price Performance', x: 1, y: 0 },
               { id: 'w3', type: 'watchlist', title: 'Market Watchlist', x: 3, y: 0 },
               { id: 'w4', type: 'summary', title: 'Market Summary', x: 0, y: 1 },
-              { id: 'w5', type: 'chart', title: 'Volume Analysis' , x: 1, y: 1}
+              { id: 'w5', type: 'chart', title: 'Volatility Index', x: 1, y: 1 }
             ])
           }
         }
@@ -282,12 +369,14 @@ export default function Dashboard() {
     return () => clearInterval(interval)
   }, [activeSymbol, widgets.length])
 
-  const handleMouseDown = (_e: React.MouseEvent, widgetId: string) => {
+  const handleMouseDown = (e: React.MouseEvent, widgetId: string) => {
     if ((e.target as HTMLElement).closest('[data-no-drag]')) return
     setDragging({ id: widgetId, startX: e.clientX, startY: e.clientY })
   }
 
-  const handleMouseMove = (e: React.MouseEvent) => {}
+  const handleMouseMove = (e: React.MouseEvent) => {
+    // DRAG LOGIC REMOVED FOR STABILITY IN THIS VERSION
+  }
   const handleMouseUp = () => setDragging(null)
 
   const addWidget = (type: any) => {
@@ -304,77 +393,78 @@ export default function Dashboard() {
   )
 
   return (
-    <div className="min-h-screen bg-background text-foreground font-sans selection:bg-[#ffaa00] selection:text-black overflow-x-hidden" onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}>
-      <div className="bg-card border-b border-border px-6 py-4 flex items-center justify-between">
+    <div className="h-[calc(100vh-64px)] flex flex-col bg-background text-foreground font-sans selection:bg-[#ffaa00] selection:text-black overflow-hidden" onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}>
+      <div className="flex-shrink-0 bg-card border-b border-border px-6 py-4 flex items-center justify-between">
         <div className="flex flex-col">
           <span className="text-2xl font-black tracking-tighter text-foreground uppercase">Pro Terminal</span>
           <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">Ghana Commodity Exchange Data</span>
         </div>
         <div className="flex gap-2 items-center">
-            <FullscreenToggle />
-            <div className="w-[1px] h-8 bg-border mx-2" />
-            {[
-              { icon: LayoutDashboard, type: 'summary', label: 'Summary' },
-              { icon: List, type: 'watchlist', label: 'Watchlist' },
-              { icon: BarChart3, type: 'chart', label: 'Chart' },
-              { icon: Activity, type: 'price', label: 'Card' }
-            ].map((btn) => (
-              <button key={btn.label} onClick={() => addWidget(btn.type as any)} className="flex items-center gap-2 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground border border-border px-3 py-1.5 rounded transition">
-                <btn.icon size={14} />
-                <span className="text-[10px] font-bold uppercase">{btn.label}</span>
-              </button>
-            ))}
+          <FullscreenToggle />
+          <div className="w-[1px] h-8 bg-border mx-2" />
+          {[
+            { icon: LayoutDashboard, type: 'summary', label: 'Summary' },
+            { icon: List, type: 'watchlist', label: 'Watchlist' },
+            { icon: BarChart3, type: 'chart', label: 'Chart' },
+            { icon: Activity, type: 'price', label: 'Card' }
+          ].map((btn) => (
+            <button key={btn.label} onClick={() => addWidget(btn.type as any)} className="flex items-center gap-2 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground border border-border px-3 py-1.5 rounded transition">
+              <btn.icon size={14} />
+              <span className="text-[10px] font-bold uppercase">{btn.label}</span>
+            </button>
+          ))}
         </div>
       </div>
 
-      <main className="p-6 grid grid-cols-1 md:grid-cols-4 gap-6 auto-rows-[minmax(300px,_auto)]">
-        {widgets.map(widget => (
-          <div 
-            key={widget.id}
-            onMouseDown={(e) => handleMouseDown(e, widget.id)}
-            className={`bg-card border border-border rounded-lg flex flex-col transition-all duration-200 group relative ${
-              widget.type === 'chart' ? 'md:col-span-2 md:row-span-2' : 
-              widget.type === 'watchlist' ? 'md:col-span-1 md:row-span-2' : 
-              'md:col-span-1 md:row-span-1'
-            } ${dragging?.id === widget.id ? 'z-50 ring-2 ring-[#ffaa00] opacity-90 scale-[1.01]' : 'shadow-xl dark:shadow-black/50'}`}
-          >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border cursor-grab active:cursor-grabbing">
-              <div className="flex items-center gap-2">
-                <GripHorizontal size={14} className="text-muted-foreground/30 group-hover:text-muted-foreground transition" />
-                <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{widget.title}</span>
+      <main className="flex-1 overflow-y-auto p-6 bg-muted/20">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 auto-rows-auto">
+          {widgets.map(widget => (
+            <div
+              key={widget.id}
+              onMouseDown={(e) => handleMouseDown(e, widget.id)}
+              className={`bg-card border border-border rounded-lg flex flex-col transition-all duration-200 group relative overflow-hidden ${widget.type === 'chart' ? 'md:col-span-2 md:row-span-1 min-h-[250px]' :
+                widget.type === 'watchlist' ? 'md:col-span-1 md:row-span-1 min-h-[250px]' :
+                  'md:col-span-1 md:row-span-1 min-h-[120px]'
+                } ${dragging?.id === widget.id ? 'z-50 ring-2 ring-[#ffaa00] opacity-90 scale-[1.01]' : 'shadow-xl dark:shadow-black/50 hover:border-foreground/20'}`}
+            >
+              <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-border cursor-grab active:cursor-grabbing bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <GripHorizontal size={14} className="text-muted-foreground/30 group-hover:text-muted-foreground transition" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{widget.title}</span>
+                </div>
+                <button onClick={() => setWidgets(prev => prev.filter(w => w.id !== widget.id))} className="text-muted-foreground hover:text-rose-500 transition-colors">
+                  <X size={12} />
+                </button>
               </div>
-              <button onClick={() => setWidgets(prev => prev.filter(w => w.id !== widget.id))} className="text-muted-foreground hover:text-rose-500">
-                <X size={14} />
-              </button>
-            </div>
-            <div className="flex-1 p-5 overflow-hidden">
-               {focusCommodity ? (
-                 <>
-                   {widget.type === 'price' && <PriceCard commodity={focusCommodity} />}
-                   {widget.type === 'chart' && <MainChart commodity={focusCommodity} />}
-                   {widget.type === 'watchlist' && <Watchlist commodities={commodities} activeSymbol={activeSymbol} onSelect={setActiveSymbol} />}
-                   {widget.type === 'summary' && <SummaryStats commodities={commodities} />}
-                 </>
-               ) : (
-                 <div className="h-full flex items-center justify-center">
+              <div className="flex-1 p-3 overflow-hidden">
+                {focusCommodity ? (
+                  <>
+                    {widget.type === 'price' && <PriceCard commodity={focusCommodity} />}
+                    {widget.type === 'chart' && <MainChart commodity={focusCommodity} title={widget.title} />}
+                    {widget.type === 'watchlist' && <Watchlist commodities={commodities} activeSymbol={activeSymbol} onSelect={setActiveSymbol} />}
+                    {widget.type === 'summary' && <SummaryStats commodities={commodities} />}
+                  </>
+                ) : (
+                  <div className="h-full flex items-center justify-center">
                     <div className="text-muted-foreground uppercase text-[10px] font-bold animate-pulse">Establishing Stream...</div>
-                 </div>
-               )}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </main>
 
-      <footer className="fixed bottom-0 left-0 right-0 h-8 bg-background border-t border-border flex items-center z-50">
+      <footer className="flex-shrink-0 bottom-0 left-0 right-0 h-8 bg-background border-t border-border flex items-center z-50">
         <div className="bg-[#ffaa00] h-full px-4 flex items-center text-[10px] font-black text-black uppercase">LIVE</div>
-        <div className="flex-1 overflow-hidden">
-          <div className="flex items-center gap-8 animate-marquee whitespace-nowrap">
+        <div className="flex-1 overflow-hidden relative">
+          <div className="flex items-center gap-8 animate-marquee whitespace-nowrap absolute inset-0 py-2">
             {commodities.map(c => (
               <div key={c.symbol} className="flex items-center gap-2 text-[10px] font-bold">
                 <span className="text-muted-foreground uppercase">{c.symbol}</span>
                 <span className="text-foreground">GHC {c.price.toLocaleString()}</span>
                 <span className={c.changePercent >= 0 ? 'text-emerald-500' : 'text-rose-500'}>
-                  {c.changePercent >= 0 ? '' : ''}{Math.abs(c.changePercent).toFixed(2)}%
+                  {c.changePercent >= 0 ? '▲' : '▼'}{Math.abs(c.changePercent).toFixed(2)}%
                 </span>
               </div>
             ))}
@@ -383,10 +473,14 @@ export default function Dashboard() {
       </footer>
 
       <style jsx global>{`
-        @keyframes marquee { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
-        .animate-marquee { animation: marquee 80s linear infinite; }
+        @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+        .animate-marquee { 
+          animation: marquee 40s linear infinite; 
+          width: fit-content;
+        }
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 2px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
       `}</style>
     </div>
   )

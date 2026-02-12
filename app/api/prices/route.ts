@@ -11,12 +11,13 @@ export async function GET() {
     ])
 
     if (!pricesRes.ok) throw new Error(`Firebase prices error: ${pricesRes.status}`)
-    
+
     const pricesData = await pricesRes.json()
     const symbolsData = await symbolsRes.json()
 
     // transform data structure
-    const commodities = Object.entries(pricesData.data || {}).map(([key, value]: [string, Record<string, any>]) => {
+    const commodities = Object.entries(pricesData.data || {}).map(([key, entry]) => {
+      const value = entry as any
       const metadata = (symbolsData as Record<string, any>)[key] || {}
       const close = parseFloat(value.ClosingPrice)
       const open = value.OpeningPrice === '0' || !value.OpeningPrice ? close : parseFloat(value.OpeningPrice)

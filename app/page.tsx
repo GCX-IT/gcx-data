@@ -16,7 +16,7 @@ export default function Home() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-16">
           <div className="bg-zinc-900 border border-zinc-800 p-8">
             <h3 className="text-2xl font-black mb-4 text-[#ff4500]">Real-Time Terminal</h3>
-            <p className="text-zinc-400 mb-6">Bloomberg-style market data terminal with live prices, high/low tracking, and professional data tables.</p>
+            <p className="text-zinc-400 mb-6">Financial-grade market data terminal with live prices, high/low tracking, and professional data tables.</p>
             <Link href="/tv" className="inline-block bg-[#ff4500] text-black px-6 py-3 font-black hover:bg-orange-500 transition">
               LAUNCH TV TERMINAL →
             </Link>
