@@ -1,7 +1,9 @@
 ﻿'use client'
 import { useEffect, useState, Suspense, useMemo } from 'react'
 import { TerminalHeader, MarketGrid, SidePanel } from '@/components/TerminalComponents'
+import type { NewsItem } from '@/components/TerminalComponents'
 import { GroupedTicker } from '@/components/TerminalTicker'
+import { VideoPlayer } from '@/components/VideoPlayer'
 
 interface Commodity {
   symbol: string;
@@ -11,10 +13,13 @@ interface Commodity {
   highPrice?: number;
   lowPrice?: number;
   lastTradeDate: string;
+  history?: { val: number }[];
 }
 
 function TVContent() {
   const [commodities, setCommodities] = useState<Commodity[]>([])
+  const [historyMap, setHistoryMap] = useState<Record<string, { val: number }[]>>({})
+  const [news, setNews] = useState<NewsItem[]>([])
   const [loading, setLoading] = useState(true)
   const [currentTime, setCurrentTime] = useState(new Date())
 
@@ -23,14 +28,29 @@ function TVContent() {
       try {
         const response = await fetch('/api/prices')
         const result = await response.json()
-        if (result.success) setCommodities(result.data)
+        if (result.success) {
+          setCommodities(result.data)
+          if (result.historyMap) setHistoryMap(result.historyMap)
+        }
       } catch (err) { console.error(err) }
       finally { setLoading(false) }
     }
+
+    const fetchNews = async () => {
+      try {
+        const res = await fetch('/api/news-ticker')
+        const result = await res.json()
+        if (result.data && Array.isArray(result.data)) setNews(result.data)
+      } catch (err) { console.error('News fetch error:', err) }
+    }
+
     fetchPrices()
-    const interval = setInterval(fetchPrices, 30000)
+    fetchNews()
+
+    const priceInterval = setInterval(fetchPrices, 30000)
+    const newsInterval = setInterval(fetchNews, 120000) // refresh news every 2 min
     const tInterval = setInterval(() => setCurrentTime(new Date()), 1000)
-    return () => { clearInterval(interval); clearInterval(tInterval) }
+    return () => { clearInterval(priceInterval); clearInterval(newsInterval); clearInterval(tInterval) }
   }, [])
 
   const mainSix = useMemo(() => {
@@ -42,44 +62,52 @@ function TVContent() {
       { key: 'SESAME', label: 'Sesame', symbol: 'SS', color: '#f472b6' },
       { key: 'SORGHUM', label: 'Sorghum', symbol: 'SR', color: '#fbbf24' }
     ]
-
     return keywords.map(kw => {
       const matches = commodities.filter(c => c.commodity.toUpperCase().includes(kw.key))
       const count = matches.length
-      const avgPrice = count > 0
-        ? matches.reduce((sum, c) => sum + c.price, 0) / count
-        : 0
-      const avgChange = count > 0
-        ? matches.reduce((sum, c) => sum + c.changePercent, 0) / count
-        : 0
+      const avgPrice = count > 0 ? matches.reduce((s, c) => s + c.price, 0) / count : 0
+      const avgChange = count > 0 ? matches.reduce((s, c) => s + c.changePercent, 0) / count : 0
 
-      const basePrice = avgPrice
-      const change = avgChange
+      // Use most recent lastTradeDate from matching symbols
+      const latestDate = matches
+        .map(c => c.lastTradeDate)
+        .filter(Boolean)
+        .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] || ''
 
-      // Generate more stable historical data for sparkline
-      const history = Array.from({ length: 12 }).map((_, i) => {
-        const progress = i / 11
-        const variance = basePrice * 0.02 * Math.sin(progress * Math.PI)
-        const noise = (Math.random() - 0.5) * (basePrice * 0.01)
-        const value = basePrice > 0
-          ? basePrice * (0.99 + (change / 200)) + variance + noise
-          : 4000 + Math.random() * 500
-
-        return {
-          time: i,
-          value: parseFloat(value.toFixed(2))
+      // Build real history by pooling all historical entries for matching symbols
+      const allHistoryPoints: { val: number; date: string }[] = []
+      matches.forEach(c => {
+        const hist = historyMap[c.symbol]
+        if (hist && hist.length > 0) {
+          // historyMap values are {val} from /api/prices - normalize just in case
+          hist.forEach((h: any, i: number) => {
+            const val = typeof h === 'number' ? h : (h.val ?? h.value ?? 0)
+            allHistoryPoints.push({ val, date: String(i) })
+          })
         }
       })
 
-      return {
-        ...kw,
-        label: `${kw.label} (${count})`,
-        price: basePrice,
-        change: change,
-        history
-      }
+      // If we got real data pool it, otherwise generate sensible fallback
+      const history = allHistoryPoints.length >= 3
+        ? allHistoryPoints.slice(-20).map(h => ({ val: h.val }))
+        : Array.from({ length: 12 }).map((_, i) => {
+            const progress = i / 11
+            const variance = avgPrice * 0.02 * Math.sin(progress * Math.PI)
+            const noise = (Math.random() - 0.5) * (avgPrice * 0.01)
+            return { val: parseFloat((avgPrice > 0 ? avgPrice * (0.99 + (avgChange / 200)) + variance + noise : 4000 + Math.random() * 500).toFixed(2)) }
+          })
+
+      return { ...kw, label: `${kw.label} (${count})`, price: avgPrice, change: avgChange, history, lastTradeDate: latestDate }
     })
-  }, [commodities])
+  }, [commodities, historyMap])
+
+  // Enrich commodities with history for the bottom ticker
+  const enrichedCommodities = useMemo(() =>
+    commodities.map(c => ({
+      ...c,
+      history: historyMap[c.symbol], // already in { val } format from /api/prices
+    }))
+  , [commodities, historyMap])
 
   if (loading) return (
     <div className="h-screen w-screen bg-background flex flex-col items-center justify-center text-[#ffaa00] font-mono">
@@ -94,46 +122,14 @@ function TVContent() {
       <MarketGrid items={mainSix} />
 
       <div className="flex-1 flex overflow-hidden">
-        <main className="flex-[4] flex flex-col bg-background">
-          <div className="grid grid-cols-12 bg-muted/50 py-3 px-6 border-b border-border text-[10px] font-black text-muted-foreground uppercase tracking-widest">
-            <div className="col-span-2">Symbol</div>
-            <div className="col-span-3">Commodity</div>
-            <div className="col-span-2 text-right">Price (GHS)</div>
-            <div className="col-span-1 text-right px-2">High</div>
-            <div className="col-span-1 text-right px-2">Low</div>
-            <div className="col-span-1 text-right">Change%</div>
-            <div className="col-span-2 text-right">Last Trade</div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto custom-scrollbar bg-background">
-            {commodities.map((item, idx) => (
-              <div key={item.symbol} className={`grid grid-cols-12 px-6 py-4 border-b border-zinc-200 dark:border-zinc-900/40 items-center transition-colors hover:bg-muted/50 ${idx % 2 === 0 ? 'bg-background' : 'bg-muted/20'}`}>
-                <div className="col-span-2 font-black text-[#ffaa00] text-lg tracking-tighter">{item.symbol}</div>
-                <div className="col-span-3 text-muted-foreground font-bold text-[11px] uppercase truncate pr-4">{item.commodity}</div>
-                <div className="col-span-2 text-right font-black text-2xl tabular-nums tracking-tighter text-foreground">
-                  {item.price.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                </div>
-                <div className="col-span-1 text-right text-[10px] font-bold text-zinc-400 dark:text-zinc-600 tabular-nums px-2">
-                  {item.highPrice?.toLocaleString() || '---'}
-                </div>
-                <div className="col-span-1 text-right text-[10px] font-bold text-zinc-400 dark:text-zinc-600 tabular-nums px-2">
-                  {item.lowPrice?.toLocaleString() || '---'}
-                </div>
-                <div className={`col-span-1 text-right font-black text-base tabular-nums ${item.changePercent >= 0 ? 'text-emerald-500' : 'text-rose-600'}`}>
-                  {item.changePercent > 0 ? '▲' : '▼'}{Math.abs(item.changePercent).toFixed(2)}%
-                </div>
-                <div className="col-span-2 text-right text-[10px] font-black text-zinc-400 dark:text-zinc-700 uppercase">
-                  {item.lastTradeDate}
-                </div>
-              </div>
-            ))}
-          </div>
+        <main className="flex-[4] flex flex-col bg-background overflow-hidden">
+          <VideoPlayer height="100%" />
         </main>
 
-        <SidePanel commodities={commodities} />
+        <SidePanel news={news} />
       </div>
 
-      <GroupedTicker commodities={commodities} />
+      <GroupedTicker commodities={enrichedCommodities} />
 
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }

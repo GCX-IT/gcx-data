@@ -1,10 +1,35 @@
 'use client'
 import React from 'react'
-import { format } from 'date-fns'
+import { format, parseISO, isValid } from 'date-fns'
 import { Area, AreaChart, ResponsiveContainer } from 'recharts'
 import { FullscreenToggle } from './FullscreenToggle'
+import { Newspaper } from 'lucide-react'
 
 import { useTheme } from 'next-themes'
+
+export interface NewsItem {
+  id: number
+  title: string
+  slug?: string
+  excerpt?: string
+  content?: string
+  author?: string
+  featured_image?: string
+  published_at: string
+  tags?: string[]
+  // legacy news fields
+  source_name?: string
+  category?: string
+  is_breaking?: boolean
+}
+
+function formatNewsDate(dateStr: string): string {
+  try {
+    const d = parseISO(dateStr)
+    if (isValid(d)) return format(d, 'dd MMM yyyy')
+  } catch { /* ignore */ }
+  return ''
+}
 
 // --- SUB-COMPONENTS ---
 
@@ -18,7 +43,7 @@ export function Sparkline({ data, color }: { data: any[], color: string }) {
         <AreaChart data={data}>
           <Area
             type="monotone"
-            dataKey="value"
+            dataKey="val"
             stroke={displayColor}
             strokeWidth={2}
             fillOpacity={0.1}
@@ -76,6 +101,11 @@ export function MarketGrid({ items }: { items: any[] }) {
                 <span className="text-xl font-black tabular-nums tracking-tighter" style={{ color: displayColor }}>
                   {item.price > 0 ? `GHC ${item.price.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '---'}
                 </span>
+                {item.lastTradeDate && (
+                  <span className="text-[8px] text-muted-foreground/70 font-mono tabular-nums mt-0.5">
+                    {item.lastTradeDate}
+                  </span>
+                )}
               </div>
               <div className={`text-[10px] font-black tabular-nums ${item.change >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
                 {item.change >= 0 ? '▲' : '▼'} {Math.abs(item.change).toFixed(2)}%
@@ -90,22 +120,43 @@ export function MarketGrid({ items }: { items: any[] }) {
   )
 }
 
-export function SidePanel({ commodities }: { commodities: any[] }) {
+export function SidePanel({ news }: { news: NewsItem[] }) {
   return (
     <aside className="w-80 bg-background border-l border-border flex flex-col overflow-hidden">
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="p-5 border-b border-border bg-muted/20 flex-shrink-0">
-          <h3 className="text-[#ffaa00] text-[10px] font-black uppercase tracking-[0.2em] mb-4 text-center border border-border py-1 bg-card">Market Watchlist</h3>
+        <div className="px-4 py-3 border-b border-border bg-muted/20 flex-shrink-0 flex items-center gap-2">
+          <Newspaper size={11} className="text-[#ffaa00]" />
+          <h3 className="text-[#ffaa00] text-[10px] font-black uppercase tracking-[0.2em]">GCX News</h3>
         </div>
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-4">
-          {commodities.map(item => (
-            <div key={item.symbol} className="flex justify-between items-center group cursor-pointer hover:bg-muted/30 p-1 rounded-sm transition-colors border-l-2 border-transparent hover:border-[#ffaa00] pl-2">
-              <span className="text-[11px] font-black text-muted-foreground group-hover:text-[#ffaa00] transition-colors">{item.symbol}</span>
-              <div className="flex flex-col items-end leading-none">
-                <span className="text-[11px] font-black tabular-nums text-foreground">GHC {item.price.toLocaleString()}</span>
-                <span className={`text-[9px] font-black ${item.changePercent >= 0 ? 'text-emerald-500' : 'text-rose-600'}`}>
-                  {item.changePercent >= 0 ? '▲' : '▼'} {Math.abs(item.changePercent).toFixed(2)}%
-                </span>
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
+          {news.length === 0 && (
+            <p className="text-[9px] text-muted-foreground uppercase tracking-widest text-center pt-8">No posts</p>
+          )}
+          {news.map(item => (
+            <div
+              key={item.id}
+              className="group p-2.5 border border-border bg-card/30 hover:bg-muted/30 transition-colors cursor-default"
+            >
+              {item.tags && item.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-1.5">
+                  {item.tags.slice(0, 2).map(tag => (
+                    <span key={tag} className="text-[7px] font-black text-[#ffaa00]/80 uppercase tracking-widest bg-[#ffaa00]/10 px-1 py-0.5">{tag}</span>
+                  ))}
+                </div>
+              )}
+              <p className="text-[10px] font-bold text-foreground leading-snug line-clamp-3">{item.title}</p>
+              {item.excerpt && (
+                <p className="text-[8px] text-muted-foreground leading-snug line-clamp-2 mt-1">
+                  {item.excerpt.replace(/&[a-z]+;|<[^>]+>/gi, ' ').trim()}
+                </p>
+              )}
+              <div className="flex items-center justify-between mt-1.5 gap-2">
+                {item.author && (
+                  <span className="text-[8px] text-muted-foreground/70 truncate">{item.author}</span>
+                )}
+                <time className="text-[8px] text-muted-foreground/60 tabular-nums ml-auto shrink-0">
+                  {formatNewsDate(item.published_at)}
+                </time>
               </div>
             </div>
           ))}

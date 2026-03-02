@@ -5,17 +5,46 @@ const FIREBASE_BASE_URL = 'https://sserp-gcx-webservices-default-rtdb.firebaseio
 export async function GET() {
   try {
     // Fetch closing prices and symbol metadata in parallel
-    const [pricesRes, symbolsRes] = await Promise.all([
+    const [pricesRes, symbolsRes, historicalRes] = await Promise.all([
       fetch(`${FIREBASE_BASE_URL}/closing_prices.json`, { next: { revalidate: 300 } }),
-      fetch(`${FIREBASE_BASE_URL}/commodity_symbols.json`, { next: { revalidate: 3600 } })
+      fetch(`${FIREBASE_BASE_URL}/commodity_symbols.json`, { next: { revalidate: 3600 } }),
+      // Fetch full data dump for historical pricing
+      fetch(`${FIREBASE_BASE_URL}.json`, { next: { revalidate: 600 } }).catch(() => null)
     ])
 
     if (!pricesRes.ok) throw new Error(`Firebase prices error: ${pricesRes.status}`)
 
     const pricesData = await pricesRes.json()
     const symbolsData = await symbolsRes.json()
+    let historicalData: any = {}
+    
+    // Try to fetch historical data from full dump
+    if (historicalRes?.ok) {
+      try {
+        const fullData = await historicalRes.json()
+        // Extract historical records by searching for closingPrices arrays
+        for (const [key, val] of Object.entries(fullData)) {
+          if (val && typeof val === 'object' && 'symbol' in val && 'closingPrices' in val) {
+            const item = val as any
+            if (item.closingPrices && Array.isArray(item.closingPrices)) {
+              historicalData[item.symbol] = item.closingPrices
+            }
+          } else if (val && typeof val === 'object') {
+            // Search nested entries (like harold@gcx,com,gh)
+            for (const [innerKey, innerVal] of Object.entries(val)) {
+              if (innerVal && typeof innerVal === 'object' && 'symbol' in innerVal && 'closingPrices' in innerVal) {
+                const item = innerVal as any
+                if (item.closingPrices && Array.isArray(item.closingPrices)) {
+                  historicalData[item.symbol] = item.closingPrices
+                }
+              }
+            }
+          }
+        }
+      } catch { /* ignore historical fetch errors */ }
+    }
 
-    // transform data structure
+    // Transform data structure
     const commodities = Object.entries(pricesData.data || {}).map(([key, entry]) => {
       const value = entry as any
       const metadata = (symbolsData as Record<string, any>)[key] || {}
@@ -41,19 +70,29 @@ export async function GET() {
     })
 
     // Sort by most recent trade date
-    const sorted = commodities.sort((a, b) => {
-      // Custom date parser for DD-MMM-YYYY or common formats
-      const parseDate = (d: string) => {
-        try { return new Date(d).getTime() } catch { return 0 }
+    const parseDate = (d: string) => { try { return new Date(d).getTime() } catch { return 0 } }
+    const sorted = commodities.sort((a, b) => parseDate(b.lastTradeDate) - parseDate(a.lastTradeDate))
+
+    // Build history map: map symbol -> array of { val } for recharts
+    const historyMap: Record<string, { val: number }[]> = {}
+    for (const [sym, hist] of Object.entries(historicalData)) {
+      if (Array.isArray(hist) && hist.length > 0) {
+        // Sort by date and convert to chart format
+        const sorted = (hist as any[]).sort((a, b) => {
+          const aDate = new Date(a.sessionDate || '').getTime()
+          const bDate = new Date(b.sessionDate || '').getTime()
+          return aDate - bDate
+        })
+        historyMap[sym] = sorted.map(h => ({ val: parseFloat(h.closing || h.price || 0) }))
       }
-      return parseDate(b.lastTradeDate) - parseDate(a.lastTradeDate)
-    })
+    }
 
     return NextResponse.json({
       success: true,
       timestamp: pricesData.header?.timestamp || new Date().toISOString(),
       count: sorted.length,
       data: sorted,
+      historyMap,
     })
   } catch (error) {
     console.error('Error fetching market data:', error)

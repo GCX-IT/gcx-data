@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import Link from "next/link";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
-import { ThemeToggle } from "@/components/ThemeToggle";
-import { FullscreenToggle } from "@/components/FullscreenToggle";
+import { ConditionalNav, ConditionalMain } from "@/components/ConditionalNav";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -37,21 +35,10 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <nav className="fixed top-0 left-0 right-0 bg-background/80 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 z-50 px-8 py-3 flex gap-8 items-center h-16">
-            <img src="/GCX_logo_bk_053950-removebg-preview.png" alt="GCX" className="h-10 w-auto invert dark:invert-0" />
-            <div className="flex gap-8 flex-1">
-              <Link href="/" className="text-sm font-bold text-zinc-600 dark:text-zinc-300 hover:text-black dark:hover:text-white transition uppercase tracking-tight">Home</Link>
-              <Link href="/dashboard" className="text-sm font-bold text-zinc-600 dark:text-zinc-300 hover:text-black dark:hover:text-white transition uppercase tracking-tight">Dashboard</Link>
-              <Link href="/tv" className="text-sm font-bold text-zinc-600 dark:text-zinc-300 hover:text-black dark:hover:text-white transition uppercase tracking-tight">TV Terminal</Link>
-            </div>
-            <div className="flex items-center gap-2">
-              <FullscreenToggle />
-              <ThemeToggle />
-            </div>
-          </nav>
-          <main className="pt-16">
+          <ConditionalNav />
+          <ConditionalMain>
             {children}
-          </main>
+          </ConditionalMain>
         </ThemeProvider>
       </body>
     </html>

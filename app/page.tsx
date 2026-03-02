@@ -1,5 +1,47 @@
 'use client'
 import Link from 'next/link'
+import { useState } from 'react'
+import { Copy, Check, ExternalLink } from 'lucide-react'
+
+function TVDisplayCard() {
+  const [copied, setCopied] = useState(false)
+
+  const copyLink = () => {
+    const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/tv-display`
+    navigator.clipboard.writeText(url)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 p-8 md:col-span-2">
+      <h3 className="text-2xl font-black mb-4 text-sky-400">TV Public Display</h3>
+      <p className="text-zinc-400 mb-6">Share a full-screen market data display with external clients. Perfect for displaying on bank TVs or large screens. You control content from the admin panel — clients see only the terminal.</p>
+      <div className="flex flex-wrap gap-3">
+        <a href="/tv-display" target="_blank" className="inline-flex items-center gap-2 bg-sky-600 text-white px-6 py-3 font-black hover:bg-sky-500 transition">
+          <ExternalLink size={16} />
+          OPEN DISPLAY
+        </a>
+        <button
+          onClick={copyLink}
+          className="inline-flex items-center gap-2 bg-zinc-800 text-zinc-200 px-6 py-3 font-black hover:bg-zinc-700 transition border border-zinc-700"
+        >
+          {copied ? (
+            <>
+              <Check size={16} className="text-emerald-400" />
+              COPIED!
+            </>
+          ) : (
+            <>
+              <Copy size={16} />
+              COPY LINK
+            </>
+          )}
+        </button>
+      </div>
+    </div>
+  )
+}
 
 export default function Home() {
   return (
@@ -29,6 +71,16 @@ export default function Home() {
               OPEN DASHBOARD →
             </Link>
           </div>
+
+          <div className="bg-zinc-900 border border-zinc-800 p-8 md:col-span-2">
+            <h3 className="text-2xl font-black mb-4 text-[#ffaa00]">TV Admin — Video &amp; Stream Control</h3>
+            <p className="text-zinc-400 mb-6">Manage what plays on the GCX TV Terminal. Add YouTube playlists, HLS live streams, or direct MP4 videos. Set what&apos;s on air instantly from the control panel.</p>
+            <Link href="/tv-admin" className="inline-block bg-[#ffaa00] text-black px-6 py-3 font-black hover:bg-amber-400 transition">
+              OPEN TV ADMIN →
+            </Link>
+          </div>
+
+          <TVDisplayCard />
         </div>
 
         {/* COMMODITIES */}

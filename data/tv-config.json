@@ -1,0 +1,12 @@
+{
+  "nowPlaying": null,
+  "nowPlayingId": null,
+  "autoNext": true,
+  "loop": true,
+  "playlist": [],
+  "images": [],
+  "videoDuration": 150,
+  "marketDataDuration": 10,
+  "imageDuration": 120,
+  "enableRotation": false
+}
