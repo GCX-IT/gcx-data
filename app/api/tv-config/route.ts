@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { readFile, writeFile, mkdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import path from 'path'
+import { fileURLToPath } from 'url'
+import { dirname } from 'path'
 
 export interface PlaylistItem {
   id: string
@@ -32,7 +34,9 @@ export interface TVConfig {
   enableRotation: boolean     // Enable rotation cycle
 }
 
-const CONFIG_PATH = path.join(process.cwd(), 'data', 'tv-config.json')
+// Use file-based path resolution for both dev and production
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const CONFIG_PATH = path.join(__dirname, '../../../data/tv-config.json')
 
 // Fallback recursive function to safely load the config with error handling
 async function safeReadConfig(): Promise<TVConfig> {

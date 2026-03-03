@@ -1,9 +1,17 @@
 {
-  "nowPlaying": null,
-  "nowPlayingId": null,
+  "nowPlaying": "https://www.youtube.com/watch?v=7IIgvw33LuQ&pp=ygUYZ2hhbmEgY29tbW9kaXR5IGV4Y2hhbmdl",
+  "nowPlayingId": "1772545675032",
   "autoNext": true,
   "loop": true,
-  "playlist": [],
+  "playlist": [
+    {
+      "id": "1772545675032",
+      "title": "new",
+      "url": "https://www.youtube.com/watch?v=7IIgvw33LuQ&pp=ygUYZ2hhbmEgY29tbW9kaXR5IGV4Y2hhbmdl",
+      "type": "youtube",
+      "addedAt": "2026-03-03T13:47:55.032Z"
+    }
+  ],
   "images": [],
   "videoDuration": 150,
   "marketDataDuration": 10,
