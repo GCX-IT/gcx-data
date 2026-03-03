@@ -21,29 +21,46 @@ export interface ImageItem {
 }
 
 export interface TVConfig {
-  nowPlaying: string | null   // URL currently playing (null = nothing)
-  nowPlayingId: string | null // ID of the playlist item currently playing
-  autoNext: boolean           // auto-advance through playlist
-  loop: boolean               // loop playlist when finished
+  nowPlaying: string | null
+  nowPlayingId: string | null
+  autoNext: boolean
+  loop: boolean
   playlist: PlaylistItem[]
-  // Phase rotation settings
-  images: ImageItem[]         // Images to display in rotation
-  videoDuration: number       // How long to show video before rotating (seconds)
-  marketDataDuration: number  // How long to show market data (seconds)
-  imageDuration: number       // How long to show each image (seconds)
-  enableRotation: boolean     // Enable rotation cycle
+  images: ImageItem[]
+  videoDuration: number
+  marketDataDuration: number
+  imageDuration: number
+  enableRotation: boolean
 }
 
-// Use file-based path resolution for both dev and production
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const CONFIG_PATH = path.join(__dirname, '../../../data/tv-config.json')
+// On Vercel production, /tmp is the only writable directory.
+// Locally, we use the project data/ folder.
+const IS_VERCEL = process.env.VERCEL === '1'
+const __filedir = dirname(fileURLToPath(import.meta.url))
+const LOCAL_CONFIG_PATH = path.join(__filedir, '../../../data/tv-config.json')
+const TMP_CONFIG_PATH = '/tmp/tv-config.json'
+const CONFIG_PATH = IS_VERCEL ? TMP_CONFIG_PATH : LOCAL_CONFIG_PATH
 
-// Fallback recursive function to safely load the config with error handling
 async function safeReadConfig(): Promise<TVConfig> {
+  // In production, if /tmp config doesn't exist yet, seed it from the bundled default
+  if (IS_VERCEL && !existsSync(TMP_CONFIG_PATH)) {
+    try {
+      const bundled = await readFile(LOCAL_CONFIG_PATH, 'utf-8')
+      await writeFile(TMP_CONFIG_PATH, bundled, 'utf-8')
+    } catch {
+      // bundled file also not accessible, just use defaults below
+    }
+  }
   try {
     const raw = await readFile(CONFIG_PATH, 'utf-8')
     const parsed = JSON.parse(raw)
-    return { ...DEFAULT_CONFIG, ...parsed }
+    // Ensure all required fields exist (merges any missing keys with defaults)
+    return {
+      ...DEFAULT_CONFIG,
+      ...parsed,
+      playlist: parsed.playlist ?? [],
+      images: parsed.images ?? [],
+    }
   } catch (error) {
     console.error('Error reading config:', error, 'at path:', CONFIG_PATH)
     return { ...DEFAULT_CONFIG }
@@ -73,31 +90,32 @@ async function writeConfig(config: TVConfig) {
     if (!existsSync(dir)) await mkdir(dir, { recursive: true })
     await writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
   } catch (error) {
-    console.error('Error writing config:', error, 'at path:', CONFIG_PATH)
-    throw error
+    // On Vercel, /tmp writes should work. If they don't, log and continue —
+    // returning the updated config in-memory is better than crashing with 500.
+    console.error('Error writing config (non-fatal):', error, 'at path:', CONFIG_PATH)
   }
 }
 
 export async function GET() {
-  try {
-    const config = await readConfig()
-    return NextResponse.json(config)
-  } catch (error) {
-    console.error('GET /api/tv-config error:', error)
-    const defaultConfig = DEFAULT_CONFIG
-    return NextResponse.json(defaultConfig)
-  }
+  const config = await safeReadConfig()
+  return NextResponse.json(config)
 }
 
 export async function POST(req: Request) {
   try {
     const body: Partial<TVConfig> = await req.json()
     const current = await readConfig()
-    const updated: TVConfig = { ...current, ...body }
+    const updated: TVConfig = {
+      ...current,
+      ...body,
+      playlist: body.playlist ?? current.playlist ?? [],
+      images: body.images ?? current.images ?? [],
+    }
     await writeConfig(updated)
     return NextResponse.json(updated)
   } catch (err) {
     console.error('POST /api/tv-config error:', err)
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    // Return default config instead of error so client doesn't crash
+    return NextResponse.json({ ...DEFAULT_CONFIG })
   }
 }
