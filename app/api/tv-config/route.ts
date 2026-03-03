@@ -34,6 +34,18 @@ export interface TVConfig {
 
 const CONFIG_PATH = path.join(process.cwd(), 'data', 'tv-config.json')
 
+// Fallback recursive function to safely load the config with error handling
+async function safeReadConfig(): Promise<TVConfig> {
+  try {
+    const raw = await readFile(CONFIG_PATH, 'utf-8')
+    const parsed = JSON.parse(raw)
+    return { ...DEFAULT_CONFIG, ...parsed }
+  } catch (error) {
+    console.error('Error reading config:', error, 'at path:', CONFIG_PATH)
+    return { ...DEFAULT_CONFIG }
+  }
+}
+
 const DEFAULT_CONFIG: TVConfig = {
   nowPlaying: null,
   nowPlayingId: null,
@@ -48,23 +60,29 @@ const DEFAULT_CONFIG: TVConfig = {
 }
 
 async function readConfig(): Promise<TVConfig> {
-  try {
-    const raw = await readFile(CONFIG_PATH, 'utf-8')
-    return { ...DEFAULT_CONFIG, ...JSON.parse(raw) }
-  } catch {
-    return { ...DEFAULT_CONFIG }
-  }
+  return safeReadConfig()
 }
 
 async function writeConfig(config: TVConfig) {
-  const dir = path.dirname(CONFIG_PATH)
-  if (!existsSync(dir)) await mkdir(dir, { recursive: true })
-  await writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
+  try {
+    const dir = path.dirname(CONFIG_PATH)
+    if (!existsSync(dir)) await mkdir(dir, { recursive: true })
+    await writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
+  } catch (error) {
+    console.error('Error writing config:', error, 'at path:', CONFIG_PATH)
+    throw error
+  }
 }
 
 export async function GET() {
-  const config = await readConfig()
-  return NextResponse.json(config)
+  try {
+    const config = await readConfig()
+    return NextResponse.json(config)
+  } catch (error) {
+    console.error('GET /api/tv-config error:', error)
+    const defaultConfig = DEFAULT_CONFIG
+    return NextResponse.json(defaultConfig)
+  }
 }
 
 export async function POST(req: Request) {
@@ -75,6 +93,7 @@ export async function POST(req: Request) {
     await writeConfig(updated)
     return NextResponse.json(updated)
   } catch (err) {
+    console.error('POST /api/tv-config error:', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 }

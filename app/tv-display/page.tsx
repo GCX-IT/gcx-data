@@ -90,15 +90,21 @@ function TVDisplay() {
     const fetchConfig = async () => {
       try {
         const res = await fetch('/api/tv-config')
+        if (!res.ok) throw new Error(`API returned ${res.status}`)
         const result = await res.json()
-        setConfig({
-          enableRotation: result.enableRotation ?? false,
-          videoDuration: result.videoDuration ?? 60,
-          marketDataDuration: result.marketDataDuration ?? 10,
-          imageDuration: result.imageDuration ?? 120,
-          images: result.images ?? [],
-        })
-      } catch (err) { console.error('Config fetch error:', err) }
+        if (result && typeof result === 'object') {
+          setConfig({
+            enableRotation: result.enableRotation ?? false,
+            videoDuration: result.videoDuration ?? 60,
+            marketDataDuration: result.marketDataDuration ?? 10,
+            imageDuration: result.imageDuration ?? 120,
+            images: Array.isArray(result.images) ? result.images : [],
+          })
+        }
+      } catch (err) { 
+        console.error('Config fetch error:', err)
+        // Keep default config on error
+      }
     }
 
     fetchPrices()
