@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
-const GCX_BACKEND = 'https://gcx-backend-api-e4d0fabe07d7.herokuapp.com'
+// Go backend base URL — set GCX_BACKEND_URL in Vercel env vars.
+const GCX_BACKEND = process.env.GCX_BACKEND_URL ?? 'http://188.166.159.42:8081'
 
 export async function GET() {
   try {

@@ -1,9 +1,4 @@
 import { NextResponse } from 'next/server'
-import { readFile, writeFile, mkdir } from 'fs/promises'
-import { existsSync } from 'fs'
-import path from 'path'
-import { fileURLToPath } from 'url'
-import { dirname } from 'path'
 
 export interface PlaylistItem {
   id: string
@@ -33,40 +28,6 @@ export interface TVConfig {
   enableRotation: boolean
 }
 
-// On Vercel production, /tmp is the only writable directory.
-// Locally, we use the project data/ folder.
-const IS_VERCEL = process.env.VERCEL === '1'
-const __filedir = dirname(fileURLToPath(import.meta.url))
-const LOCAL_CONFIG_PATH = path.join(__filedir, '../../../data/tv-config.json')
-const TMP_CONFIG_PATH = '/tmp/tv-config.json'
-const CONFIG_PATH = IS_VERCEL ? TMP_CONFIG_PATH : LOCAL_CONFIG_PATH
-
-async function safeReadConfig(): Promise<TVConfig> {
-  // In production, if /tmp config doesn't exist yet, seed it from the bundled default
-  if (IS_VERCEL && !existsSync(TMP_CONFIG_PATH)) {
-    try {
-      const bundled = await readFile(LOCAL_CONFIG_PATH, 'utf-8')
-      await writeFile(TMP_CONFIG_PATH, bundled, 'utf-8')
-    } catch {
-      // bundled file also not accessible, just use defaults below
-    }
-  }
-  try {
-    const raw = await readFile(CONFIG_PATH, 'utf-8')
-    const parsed = JSON.parse(raw)
-    // Ensure all required fields exist (merges any missing keys with defaults)
-    return {
-      ...DEFAULT_CONFIG,
-      ...parsed,
-      playlist: parsed.playlist ?? [],
-      images: parsed.images ?? [],
-    }
-  } catch (error) {
-    console.error('Error reading config:', error, 'at path:', CONFIG_PATH)
-    return { ...DEFAULT_CONFIG }
-  }
-}
-
 const DEFAULT_CONFIG: TVConfig = {
   nowPlaying: null,
   nowPlayingId: null,
@@ -80,42 +41,59 @@ const DEFAULT_CONFIG: TVConfig = {
   enableRotation: false,
 }
 
-async function readConfig(): Promise<TVConfig> {
-  return safeReadConfig()
-}
-
-async function writeConfig(config: TVConfig) {
-  try {
-    const dir = path.dirname(CONFIG_PATH)
-    if (!existsSync(dir)) await mkdir(dir, { recursive: true })
-    await writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
-  } catch (error) {
-    // On Vercel, /tmp writes should work. If they don't, log and continue —
-    // returning the updated config in-memory is better than crashing with 500.
-    console.error('Error writing config (non-fatal):', error, 'at path:', CONFIG_PATH)
-  }
-}
+// Go backend base URL — set GCX_BACKEND_URL in Vercel env vars.
+// Falls back to the VPS address used by gcx-frontend.
+const GCX_BACKEND = process.env.GCX_BACKEND_URL ?? 'http://188.166.159.42:8081'
 
 export async function GET() {
-  const config = await safeReadConfig()
-  return NextResponse.json(config)
+  try {
+    const res = await fetch(`${GCX_BACKEND}/api/tv/config`, {
+      next: { revalidate: 0 }, // always fresh
+      headers: { Accept: 'application/json' },
+    })
+    if (!res.ok) throw new Error(`Backend returned ${res.status}`)
+    const data: TVConfig = await res.json()
+    return NextResponse.json({
+      ...DEFAULT_CONFIG,
+      ...data,
+      playlist: Array.isArray(data.playlist) ? data.playlist : [],
+      images: Array.isArray(data.images) ? data.images : [],
+    })
+  } catch (err) {
+    console.error('GET /api/tv/config error:', err)
+    return NextResponse.json({ ...DEFAULT_CONFIG })
+  }
 }
 
 export async function POST(req: Request) {
   try {
     const body: Partial<TVConfig> = await req.json()
-    const current = await readConfig()
-    const updated: TVConfig = {
-      ...current,
-      ...body,
-      playlist: body.playlist ?? current.playlist ?? [],
-      images: body.images ?? current.images ?? [],
+
+    // Forward auth header from the browser to the Go backend if present
+    const authHeader = req.headers.get('Authorization') ?? ''
+
+    const res = await fetch(`${GCX_BACKEND}/api/tv/config`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...(authHeader ? { Authorization: authHeader } : {}),
+      },
+      body: JSON.stringify(body),
+    })
+
+    if (!res.ok) {
+      const text = await res.text()
+      console.error('Backend POST /api/tv/config error:', res.status, text)
+      // Return the current config rather than crashing the client
+      const current = await fetch(`${GCX_BACKEND}/api/tv/config`).then(r => r.json()).catch(() => DEFAULT_CONFIG)
+      return NextResponse.json(current)
     }
-    await writeConfig(updated)
+
+    const updated: TVConfig = await res.json()
     return NextResponse.json(updated)
   } catch (err) {
     console.error('POST /api/tv-config error:', err)
-    // Return default config instead of error so client doesn't crash
     return NextResponse.json({ ...DEFAULT_CONFIG })
   }
 }
