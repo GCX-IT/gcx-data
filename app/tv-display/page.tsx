@@ -5,6 +5,7 @@ import type { NewsItem } from '@/components/TerminalComponents'
 import { GroupedTicker } from '@/components/TerminalTicker'
 import { VideoPlayer } from '@/components/VideoPlayer'
 import { MarketDataTable } from '@/components/MarketDataTable'
+import { CommodityIndex } from '@/components/CommodityIndex'
 import { Maximize2, Minimize2 } from 'lucide-react'
 
 interface Commodity {
@@ -207,9 +208,8 @@ function TVDisplay() {
   , [commodities, historyMap])
 
   if (loading) return (
-    <div className="h-screen w-screen bg-background flex flex-col items-center justify-center text-[#ffaa00] font-mono">
-      <div className="w-12 h-12 border-2 border-[#ffaa00] border-t-transparent animate-spin rounded-full mb-6" />
-      <div className="tracking-[0.5em] text-[10px] uppercase font-black">Decrypting Data Stream...</div>
+    <div className="h-screen w-screen bg-background flex items-center justify-center">
+      <div className="w-10 h-10 border-2 border-[#ffaa00] border-t-transparent animate-spin rounded-full" />
     </div>
   )
 
@@ -264,10 +264,11 @@ function TVDisplay() {
         >
           {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
         </button>
-        <MarketDataTable commodities={commodities} />
-        <div className="absolute bottom-4 right-4 bg-[#ffaa00] text-black px-4 py-2 font-black text-sm rounded">
-          {config.marketDataDuration - phaseProgress}s remaining
-        </div>
+        <MarketDataTable
+          commodities={commodities}
+          phaseProgress={phaseProgress}
+          phaseDuration={config.marketDataDuration}
+        />
         <style jsx global>{`
           @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&display=swap');
           body { font-family: 'JetBrains+Mono', monospace; }
@@ -278,10 +279,8 @@ function TVDisplay() {
 
   if (currentPhase === 'image') {
     const currentImage = config.images[currentImageIndex]
-    const timeRemaining = config.imageDuration - (phaseProgress - config.marketDataDuration)
-    
     return (
-      <div className="fixed inset-0 bg-black flex items-center justify-center overflow-hidden select-none">
+      <div className="fixed inset-0 bg-background text-foreground flex flex-col font-mono overflow-hidden select-none selection:bg-none">
         <button
           onClick={toggleFullscreen}
           className="fixed top-4 right-4 z-50 bg-[#ffaa00] hover:bg-amber-400 text-black p-2 rounded shadow-lg transition"
@@ -289,20 +288,29 @@ function TVDisplay() {
         >
           {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
         </button>
-        {currentImage ? (
-          <>
-            <img 
-              src={currentImage.url} 
-              alt={currentImage.name}
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute bottom-8 right-8 text-white text-sm font-mono bg-black/60 px-4 py-2 rounded">
-              {timeRemaining}s
-            </div>
-          </>
-        ) : (
-          <div className="text-white text-2xl">No image configured</div>
-        )}
+        <MarketGrid items={mainSix} />
+        <div className="flex-1 flex overflow-hidden">
+          <main className="flex-[4] flex flex-col bg-background overflow-hidden">
+            {currentImage ? (
+              <img
+                key={currentImage.url}
+                src={currentImage.url}
+                alt={currentImage.name}
+                className="w-full h-full object-contain bg-black"
+              />
+            ) : (
+              <CommodityIndex commodities={commodities} />
+            )}
+          </main>
+          <SidePanel news={news} />
+        </div>
+        <GroupedTicker commodities={enrichedCommodities} />
+        <style jsx global>{`
+          .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+          .custom-scrollbar::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 2px; }
+          @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&display=swap');
+          body { font-family: 'JetBrains+Mono', monospace; }
+        `}</style>
       </div>
     )
   }

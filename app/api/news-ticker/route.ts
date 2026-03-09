@@ -47,7 +47,10 @@ export async function GET() {
     // Sort by published_at descending (most recent first)
     items.sort((a, b) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime())
 
-    return NextResponse.json({ success: true, data: items, count: items.length })
+    // Limit to the 5 most recent combined blog+news items
+    const limited = items.slice(0, 5)
+
+    return NextResponse.json({ success: true, data: limited, count: limited.length })
   } catch (error) {
     return NextResponse.json({
       success: false,

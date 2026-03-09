@@ -6,9 +6,8 @@ import { FullscreenToggle } from "@/components/FullscreenToggle"
 
 export function ConditionalNav() {
   const pathname = usePathname()
-  
-  // Hide navbar on /tv-display route
-  if (pathname === '/tv-display') {
+
+  if (pathname === '/tv-display' || pathname === '/login') {
     return null
   }
 
@@ -17,7 +16,6 @@ export function ConditionalNav() {
       <img src="/GCX_logo_bk_053950-removebg-preview.png" alt="GCX" className="h-10 w-auto invert dark:invert-0" />
       <div className="flex gap-8 flex-1">
         <Link href="/" className="text-sm font-bold text-zinc-600 dark:text-zinc-300 hover:text-black dark:hover:text-white transition uppercase tracking-tight">Home</Link>
-        <Link href="/dashboard" className="text-sm font-bold text-zinc-600 dark:text-zinc-300 hover:text-black dark:hover:text-white transition uppercase tracking-tight">Dashboard</Link>
         <Link href="/tv" className="text-sm font-bold text-zinc-600 dark:text-zinc-300 hover:text-black dark:hover:text-white transition uppercase tracking-tight">TV Terminal</Link>
         <Link href="/tv-admin" className="text-sm font-bold text-zinc-600 dark:text-zinc-300 hover:text-black dark:hover:text-white transition uppercase tracking-tight">TV Admin</Link>
       </div>
@@ -32,8 +30,8 @@ export function ConditionalNav() {
 export function ConditionalMain({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   
-  // No padding for tv-display since no navbar
-  if (pathname === '/tv-display') {
+  // No padding where we hide the navbar
+  if (pathname === '/tv-display' || pathname === '/login') {
     return <>{children}</>
   }
 
