@@ -344,7 +344,7 @@ export default function TVAdminPage() {
                 </div>
                 <div className="w-full bg-black relative overflow-hidden border border-zinc-800">
                   {config.nowPlaying ? (
-                    <VideoPlayer url={config.nowPlaying ?? undefined} height={320} />
+                    <VideoPlayer height={320} />
                   ) : (
                     <div className="h-full flex flex-col items-center justify-center gap-3 text-zinc-700">
                       <Radio size={32} />

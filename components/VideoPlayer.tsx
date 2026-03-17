@@ -1,49 +1,72 @@
 ﻿'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Play, Pause, Volume2, VolumeX, Maximize2, Minimize2, Radio, Settings } from 'lucide-react'
 import Link from 'next/link'
+import ReactPlayer from 'react-player'
 
 interface VideoPlayerProps {
   url?: string
   height?: number | string
 }
 
+const TOKEN_KEY = 'gcx_auth_token'
+
+interface PlaylistItem {
+  id: string
+  title: string
+  url: string
+  type: 'youtube' | 'stream' | 'file'
+  addedAt: string
+}
+
 interface TVConfig {
   nowPlaying: string | null
+  nowPlayingId: string | null
+  autoNext: boolean
   loop: boolean
+  playlist: PlaylistItem[]
 }
 
-function getYouTubeId(url: string): string | null {
-  try {
-    const u = new URL(url)
-    if (u.hostname.includes('youtube.com')) {
-      return u.searchParams.get('v') || u.pathname.split('/').pop() || null
-    }
-    if (u.hostname === 'youtu.be') {
-      return u.pathname.slice(1).split('?')[0] || null
-    }
-  } catch { /* ignore */ }
-  return null
-}
-
-function isVideoFile(url: string): boolean {
-  return /\.(mp4|webm|ogg|m3u8)(\?|$)/i.test(url)
+function safeArray<T>(v: unknown): T[] {
+  return Array.isArray(v) ? (v as T[]) : []
 }
 
 export function VideoPlayer({ url: propUrl, height = 200 }: VideoPlayerProps) {
-  const [apiUrl, setApiUrl] = useState<string | null>(null)
-  const [loop, setLoop] = useState(true)
+  const [config, setConfig] = useState<TVConfig | null>(null)
   const [muted, setMuted] = useState(true)
   const [paused, setPaused] = useState(false)
   const [expanded, setExpanded] = useState(false)
+  const [overrideNowPlaying, setOverrideNowPlaying] = useState<{ id: string | null; url: string | null } | null>(null)
+  const lastServerNowPlayingId = useRef<string | null>(null)
 
   const fetchConfig = useCallback(async () => {
     if (propUrl) return
     try {
       const res = await fetch('/api/tv-config')
-      const data: TVConfig = await res.json()
-      setApiUrl(data.nowPlaying)
-      setLoop(data.loop ?? true)
+      const data = await res.json()
+
+      const next: TVConfig = {
+        nowPlaying: typeof data?.nowPlaying === 'string' ? data.nowPlaying : null,
+        nowPlayingId: typeof data?.nowPlayingId === 'string' ? data.nowPlayingId : null,
+        autoNext: !!data?.autoNext,
+        loop: data?.loop !== false,
+        playlist: safeArray<PlaylistItem>(data?.playlist),
+      }
+
+      // If admin changed what's on-air (server pointer changed), drop any local override.
+      if (lastServerNowPlayingId.current !== next.nowPlayingId) {
+        setOverrideNowPlaying(null)
+        lastServerNowPlayingId.current = next.nowPlayingId
+      }
+
+      // If we pushed an override and the server has caught up, clear it.
+      setOverrideNowPlaying(prev => {
+        if (!prev) return prev
+        if (prev.id === next.nowPlayingId && prev.url === next.nowPlaying) return null
+        return prev
+      })
+
+      setConfig(next)
     } catch { /* ignore */ }
   }, [propUrl])
 
@@ -53,13 +76,80 @@ export function VideoPlayer({ url: propUrl, height = 200 }: VideoPlayerProps) {
     return () => clearInterval(id)
   }, [fetchConfig])
 
-  const videoUrl = propUrl || apiUrl || ''
-  const ytId = videoUrl ? getYouTubeId(videoUrl) : null
-  const isFile = videoUrl ? isVideoFile(videoUrl) : false
+  const effectiveNowPlaying = propUrl ?? overrideNowPlaying?.url ?? config?.nowPlaying ?? null
+  const effectiveNowPlayingId = overrideNowPlaying?.id ?? config?.nowPlayingId ?? null
+  const playlist = config?.playlist ?? []
+  const autoNext = config?.autoNext ?? true
+  const loopPlaylist = config?.loop ?? true
 
-  const ytEmbedUrl = ytId
-    ? `https://www.youtube.com/embed/${ytId}?autoplay=1&mute=${muted ? 1 : 0}&loop=${loop ? 1 : 0}&playlist=${ytId}&modestbranding=1&rel=0&controls=1`
-    : null
+  const videoUrl = effectiveNowPlaying || ''
+
+  const canAutoAdvance = useMemo(() => {
+    if (propUrl) return false
+    if (!autoNext) return false
+    if (!effectiveNowPlaying) return false
+    if (playlist.length < 1) return false
+    return true
+  }, [autoNext, effectiveNowPlaying, playlist.length, propUrl])
+
+  const computeNextItem = useCallback((): PlaylistItem | null => {
+    if (playlist.length === 0) return null
+
+    let idx = -1
+    if (effectiveNowPlayingId) {
+      idx = playlist.findIndex(p => p.id === effectiveNowPlayingId)
+    }
+    if (idx === -1 && effectiveNowPlaying) {
+      idx = playlist.findIndex(p => p.url === effectiveNowPlaying)
+    }
+
+    // If we can't find it, start from the beginning.
+    if (idx === -1) idx = 0
+
+    const nextIdx = idx + 1
+    if (nextIdx < playlist.length) return playlist[nextIdx]
+    if (loopPlaylist) return playlist[0]
+    return null
+  }, [effectiveNowPlaying, effectiveNowPlayingId, loopPlaylist, playlist])
+
+  const pushNowPlaying = useCallback(async (nextItem: PlaylistItem | null) => {
+    const payload = {
+      nowPlaying: nextItem?.url ?? null,
+      nowPlayingId: nextItem?.id ?? null,
+    }
+
+    // Always update local playback immediately.
+    setOverrideNowPlaying({ id: payload.nowPlayingId, url: payload.nowPlaying })
+
+    // If we have an auth token, also persist to backend so all displays stay in sync.
+    try {
+      const token = typeof window !== 'undefined' ? window.localStorage.getItem(TOKEN_KEY) : null
+      if (!token) return
+      await fetch('/api/tv-config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      })
+    } catch {
+      // ignore; local override keeps playback moving
+    }
+  }, [])
+
+  const handleEnded = useCallback(async () => {
+    if (!canAutoAdvance) return
+    const next = computeNextItem()
+    await pushNowPlaying(next)
+  }, [canAutoAdvance, computeNextItem, pushNowPlaying])
+
+  const handleError = useCallback(async () => {
+    // If something fails to load, try to advance rather than freezing the screen.
+    if (!canAutoAdvance) return
+    const next = computeNextItem()
+    await pushNowPlaying(next)
+  }, [canAutoAdvance, computeNextItem, pushNowPlaying])
 
   const isFill = height === '100%'
   const containerStyle = expanded
@@ -98,28 +188,31 @@ export function VideoPlayer({ url: propUrl, height = 200 }: VideoPlayerProps) {
           </div>
         )}
 
-        {ytEmbedUrl && (
-          <iframe
-            key={ytEmbedUrl}
-            src={ytEmbedUrl}
-            className="absolute inset-0 w-full h-full border-0"
-            allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-            allowFullScreen
-            title="GCX TV"
-          />
-        )}
-
-        {isFile && videoUrl && !ytId && (
-          <video
-            key={videoUrl}
-            src={videoUrl}
-            autoPlay
-            muted={muted}
-            loop={loop}
-            playsInline
-            controls={false}
-            className="absolute inset-0 w-full h-full object-contain"
-          />
+        {videoUrl && (
+          <div className="absolute inset-0">
+            <ReactPlayer
+              key={videoUrl}
+              src={videoUrl}
+              width="100%"
+              height="100%"
+              playing={!paused}
+              muted={muted}
+              controls={false}
+              playsInline
+              onEnded={() => { void handleEnded() }}
+              onError={() => { void handleError() }}
+              config={{
+                youtube: {
+                  playerVars: {
+                    autoplay: 1,
+                    modestbranding: 1,
+                    rel: 0,
+                  },
+                } as any,
+              }}
+              style={{ objectFit: 'contain' }}
+            />
+          </div>
         )}
       </div>
 
