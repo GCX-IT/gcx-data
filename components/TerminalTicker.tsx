@@ -43,17 +43,17 @@ export function TickerBox({ commodity }: { commodity: Commodity }) {
   const color = isPositive ? '#10b981' : '#f43f5e'
 
   return (
-    <div className="w-[280px] h-full flex flex-col justify-center border-r border-border bg-card/40 hover:bg-muted/50 transition-colors px-4 group relative overflow-hidden">
+    <div className="w-[220px] sm:w-[280px] h-full flex flex-col justify-center border-r border-border bg-card/40 hover:bg-muted/50 transition-colors px-3 sm:px-4 group relative overflow-hidden">
       <div className="flex items-center justify-between mb-0.5 z-10">
-        <span className="text-xs font-black text-[#ffaa00] tracking-tight">{commodity.symbol}</span>
-        <div className={`text-[10px] font-bold px-1.5 rounded-sm ${isPositive ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
+        <span className="text-[11px] sm:text-xs font-black text-[#ffaa00] tracking-tight">{commodity.symbol}</span>
+        <div className={`text-[9px] sm:text-[10px] font-bold px-1.5 rounded-sm ${isPositive ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
           {isPositive ? '▲' : '▼'} {Math.abs(commodity.changePercent).toFixed(2)}%
         </div>
       </div>
 
       <div className="flex items-end justify-between z-10">
         <div className="flex flex-col">
-          <span className="text-lg font-black tabular-nums tracking-tighter text-foreground leading-none">
+          <span className="text-base sm:text-lg font-black tabular-nums tracking-tighter text-foreground leading-none">
             GHC {commodity.price.toLocaleString(undefined, { minimumFractionDigits: 2 })}
           </span>
           {commodity.lastTradeDate && (
@@ -62,7 +62,7 @@ export function TickerBox({ commodity }: { commodity: Commodity }) {
             </span>
           )}
         </div>
-        <div className="h-8 w-20 shrink-0">
+        <div className="h-7 sm:h-8 w-16 sm:w-20 shrink-0">
           <MiniSparkline color={color} data={commodity.history} />
         </div>
       </div>
@@ -129,9 +129,9 @@ export function GroupedTicker({ commodities }: { commodities: Commodity[] }) {
   return (
     <div className="h-24 w-full bg-background border-t border-border flex items-center overflow-hidden">
       {/* BRAND LABEL */}
-      <div className="h-full bg-[#ffaa00] text-black px-6 flex items-center gap-3 font-black z-30 shadow-[10px_0_30px_rgba(0,0,0,0.2)] dark:shadow-[10px_0_30px_rgba(0,0,0,0.8)] min-w-[180px]">
-        <span className="text-xl italic tracking-tighter">GCX LIVE</span>
-        <div className="w-2 h-2 rounded-full bg-black animate-pulse" />
+      <div className="h-full bg-[#ffaa00] text-black px-2 sm:px-6 flex items-center justify-center sm:justify-start gap-2 sm:gap-3 font-black z-30 shadow-[10px_0_30px_rgba(0,0,0,0.2)] dark:shadow-[10px_0_30px_rgba(0,0,0,0.8)] min-w-[42px] sm:min-w-[180px]">
+        <span className="hidden sm:inline text-xl italic tracking-tighter">GCX LIVE</span>
+        <div className="w-2.5 h-2.5 sm:w-2 sm:h-2 rounded-full bg-black animate-pulse" />
       </div>
 
       {/* ANIMATED GROUPS */}

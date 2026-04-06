@@ -122,7 +122,7 @@ export function MarketGrid({ items }: { items: any[] }) {
 
 export function SidePanel({ news }: { news: NewsItem[] }) {
   return (
-    <aside className="w-80 bg-background border-l border-border flex flex-col overflow-hidden">
+    <aside className="w-full h-full min-w-0 bg-background border-l border-border flex flex-col overflow-hidden">
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="px-4 py-3 border-b border-border bg-muted/20 flex-shrink-0 flex items-center gap-2">
           <Newspaper size={11} className="text-[#ffaa00]" />
@@ -144,9 +144,9 @@ export function SidePanel({ news }: { news: NewsItem[] }) {
                   ))}
                 </div>
               )}
-              <p className="text-[10px] font-bold text-foreground leading-snug line-clamp-3">{item.title}</p>
+              <p className="text-[10px] sm:text-[11px] font-bold text-foreground leading-snug line-clamp-4 break-words">{item.title}</p>
               {item.excerpt && (
-                <p className="text-[8px] text-muted-foreground leading-snug line-clamp-2 mt-1">
+                <p className="text-[8px] sm:text-[9px] text-muted-foreground leading-snug line-clamp-3 mt-1 break-words">
                   {item.excerpt.replace(/&[a-z]+;|<[^>]+>/gi, ' ').trim()}
                 </p>
               )}

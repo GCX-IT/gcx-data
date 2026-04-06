@@ -1,12 +1,21 @@
 ﻿'use client'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { Play, Pause, Volume2, VolumeX, Maximize2, Minimize2, Radio, Settings } from 'lucide-react'
+import { Play, Pause, Volume2, VolumeX, Maximize2, Minimize2, Radio, Settings, SkipBack, SkipForward, Rewind, FastForward } from 'lucide-react'
 import Link from 'next/link'
 import ReactPlayer from 'react-player'
 
 interface VideoPlayerProps {
   url?: string
   height?: number | string
+  onEnded?: () => void
+  onError?: () => void
+  paused?: boolean
+  onTogglePause?: () => void
+  onPrev?: () => void
+  onNext?: () => void
+  seekStepSeconds?: number
+  fitMode?: 'cover' | 'contain'
+  localOnly?: boolean
 }
 
 const TOKEN_KEY = 'gcx_auth_token'
@@ -31,16 +40,29 @@ function safeArray<T>(v: unknown): T[] {
   return Array.isArray(v) ? (v as T[]) : []
 }
 
-export function VideoPlayer({ url: propUrl, height = 200 }: VideoPlayerProps) {
+export function VideoPlayer({
+  url: propUrl,
+  height = 200,
+  onEnded,
+  onError,
+  paused: controlledPaused,
+  onTogglePause,
+  onPrev,
+  onNext,
+  seekStepSeconds = 10,
+  fitMode = 'cover',
+  localOnly = false,
+}: VideoPlayerProps) {
   const [config, setConfig] = useState<TVConfig | null>(null)
   const [muted, setMuted] = useState(true)
-  const [paused, setPaused] = useState(false)
+  const [isPausedLocal, setIsPausedLocal] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [overrideNowPlaying, setOverrideNowPlaying] = useState<{ id: string | null; url: string | null } | null>(null)
   const lastServerNowPlayingId = useRef<string | null>(null)
+  const playerRef = useRef<any>(null)
 
   const fetchConfig = useCallback(async () => {
-    if (propUrl) return
+    if (localOnly || propUrl !== undefined) return
     try {
       const res = await fetch('/api/tv-config')
       const data = await res.json()
@@ -68,7 +90,7 @@ export function VideoPlayer({ url: propUrl, height = 200 }: VideoPlayerProps) {
 
       setConfig(next)
     } catch { /* ignore */ }
-  }, [propUrl])
+  }, [localOnly, propUrl])
 
   useEffect(() => {
     fetchConfig()
@@ -76,7 +98,9 @@ export function VideoPlayer({ url: propUrl, height = 200 }: VideoPlayerProps) {
     return () => clearInterval(id)
   }, [fetchConfig])
 
-  const effectiveNowPlaying = propUrl ?? overrideNowPlaying?.url ?? config?.nowPlaying ?? null
+  const effectiveNowPlaying = localOnly
+    ? (propUrl ?? null)
+    : (propUrl ?? overrideNowPlaying?.url ?? config?.nowPlaying ?? null)
   const effectiveNowPlayingId = overrideNowPlaying?.id ?? config?.nowPlayingId ?? null
   const playlist = config?.playlist ?? []
   const autoNext = config?.autoNext ?? true
@@ -85,12 +109,13 @@ export function VideoPlayer({ url: propUrl, height = 200 }: VideoPlayerProps) {
   const videoUrl = effectiveNowPlaying || ''
 
   const canAutoAdvance = useMemo(() => {
+    if (localOnly) return false
     if (propUrl) return false
     if (!autoNext) return false
     if (!effectiveNowPlaying) return false
     if (playlist.length < 1) return false
     return true
-  }, [autoNext, effectiveNowPlaying, playlist.length, propUrl])
+  }, [autoNext, effectiveNowPlaying, localOnly, playlist.length, propUrl])
 
   const computeNextItem = useCallback((): PlaylistItem | null => {
     if (playlist.length === 0) return null
@@ -139,17 +164,25 @@ export function VideoPlayer({ url: propUrl, height = 200 }: VideoPlayerProps) {
   }, [])
 
   const handleEnded = useCallback(async () => {
+    if (propUrl) {
+      onEnded?.()
+      return
+    }
     if (!canAutoAdvance) return
     const next = computeNextItem()
     await pushNowPlaying(next)
-  }, [canAutoAdvance, computeNextItem, pushNowPlaying])
+  }, [canAutoAdvance, computeNextItem, onEnded, propUrl, pushNowPlaying])
 
   const handleError = useCallback(async () => {
+    if (propUrl) {
+      onError?.()
+      return
+    }
     // If something fails to load, try to advance rather than freezing the screen.
     if (!canAutoAdvance) return
     const next = computeNextItem()
     await pushNowPlaying(next)
-  }, [canAutoAdvance, computeNextItem, pushNowPlaying])
+  }, [canAutoAdvance, computeNextItem, onError, propUrl, pushNowPlaying])
 
   const isFill = height === '100%'
   const containerStyle = expanded
@@ -158,15 +191,33 @@ export function VideoPlayer({ url: propUrl, height = 200 }: VideoPlayerProps) {
     ? { flex: 1, minHeight: 0 }
     : { height }
 
+  function seekBy(delta: number) {
+    const player = playerRef.current
+    if (!player || typeof player.getCurrentTime !== 'function' || typeof player.seekTo !== 'function') return
+    const current = Number(player.getCurrentTime?.() ?? 0)
+    const target = Math.max(0, current + delta)
+    player.seekTo(target, 'seconds')
+  }
+
+  function togglePause() {
+    if (onTogglePause) {
+      onTogglePause()
+      return
+    }
+    setIsPausedLocal(v => !v)
+  }
+
+  const resolvedPaused = typeof controlledPaused === 'boolean' ? controlledPaused : isPausedLocal
+
   return (
     <section
       className="relative bg-black border-b border-border flex items-stretch overflow-hidden transition-all duration-300"
       style={containerStyle}
     >
       {/* LEFT BRAND LABEL */}
-      <div className="flex-shrink-0 w-[52px] bg-[#ffaa00] text-black flex flex-col items-center justify-center gap-1.5 font-black z-20 shadow-[4px_0_20px_rgba(0,0,0,0.4)]">
+      <div className="flex-shrink-0 w-8 sm:w-[52px] bg-[#ffaa00] text-black flex flex-col items-center justify-center gap-1.5 font-black z-20 shadow-[4px_0_20px_rgba(0,0,0,0.4)]">
         <Radio size={13} className="animate-pulse" />
-        <span className="text-[7px] font-black tracking-widest uppercase [writing-mode:vertical-rl] rotate-180 leading-none">
+        <span className="hidden sm:inline text-[7px] font-black tracking-widest uppercase [writing-mode:vertical-rl] rotate-180 leading-none">
           GCX TV
         </span>
       </div>
@@ -189,13 +240,14 @@ export function VideoPlayer({ url: propUrl, height = 200 }: VideoPlayerProps) {
         )}
 
         {videoUrl && (
-          <div className="absolute inset-0">
+          <div className="absolute inset-0 gcx-react-player">
             <ReactPlayer
+              ref={playerRef}
               key={videoUrl}
               src={videoUrl}
               width="100%"
               height="100%"
-              playing={!paused}
+              playing={!resolvedPaused}
               muted={muted}
               controls={false}
               playsInline
@@ -209,15 +261,31 @@ export function VideoPlayer({ url: propUrl, height = 200 }: VideoPlayerProps) {
                     rel: 0,
                   },
                 } as any,
-              }}
-              style={{ objectFit: 'contain' }}
+              } as any}
+              style={{ objectFit: fitMode }}
             />
           </div>
         )}
       </div>
 
       {/* BOTTOM-RIGHT CONTROLS */}
-      <div className="absolute bottom-2 right-3 flex items-center gap-1.5 z-30">
+      <div className="absolute bottom-2 left-2 right-2 sm:left-auto sm:right-3 flex items-center justify-end flex-wrap gap-1.5 z-30">
+        <button
+          onClick={() => seekBy(-Math.abs(seekStepSeconds))}
+          title={`Back ${seekStepSeconds}s`}
+          className="bg-black/60 hover:bg-black/90 text-white p-1.5 rounded-sm transition backdrop-blur-sm"
+        >
+          <Rewind size={11} />
+        </button>
+        {onPrev && (
+          <button
+            onClick={onPrev}
+            title="Previous"
+            className="bg-black/60 hover:bg-black/90 text-white p-1.5 rounded-sm transition backdrop-blur-sm"
+          >
+            <SkipBack size={11} />
+          </button>
+        )}
         <button
           onClick={() => setMuted(v => !v)}
           title={muted ? 'Unmute' : 'Mute'}
@@ -226,16 +294,32 @@ export function VideoPlayer({ url: propUrl, height = 200 }: VideoPlayerProps) {
           {muted ? <VolumeX size={11} /> : <Volume2 size={11} />}
         </button>
         <button
-          onClick={() => setPaused(v => !v)}
-          title={paused ? 'Play' : 'Pause'}
+          onClick={togglePause}
+          title={resolvedPaused ? 'Play' : 'Pause'}
           className="bg-black/60 hover:bg-black/90 text-white p-1.5 rounded-sm transition backdrop-blur-sm"
         >
-          {paused ? <Play size={11} /> : <Pause size={11} />}
+          {resolvedPaused ? <Play size={11} /> : <Pause size={11} />}
+        </button>
+        {onNext && (
+          <button
+            onClick={onNext}
+            title="Next"
+            className="bg-black/60 hover:bg-black/90 text-white p-1.5 rounded-sm transition backdrop-blur-sm"
+          >
+            <SkipForward size={11} />
+          </button>
+        )}
+        <button
+          onClick={() => seekBy(Math.abs(seekStepSeconds))}
+          title={`Forward ${seekStepSeconds}s`}
+          className="bg-black/60 hover:bg-black/90 text-white p-1.5 rounded-sm transition backdrop-blur-sm"
+        >
+          <FastForward size={11} />
         </button>
         <Link
           href="/tv-admin"
           title="TV Admin"
-          className="bg-black/60 hover:bg-[#ffaa00]/80 text-white hover:text-black p-1.5 rounded-sm transition backdrop-blur-sm"
+          className="hidden sm:inline-flex bg-black/60 hover:bg-[#ffaa00]/80 text-white hover:text-black p-1.5 rounded-sm transition backdrop-blur-sm"
         >
           <Settings size={11} />
         </Link>
@@ -249,7 +333,7 @@ export function VideoPlayer({ url: propUrl, height = 200 }: VideoPlayerProps) {
       </div>
 
       {/* TOP-RIGHT: LIVE / OFF AIR */}
-      <div className="absolute top-2 right-3 flex items-center gap-1.5 z-30 bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded-sm">
+      <div className="absolute top-2 right-2 sm:right-3 flex items-center gap-1.5 z-30 bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded-sm">
         {videoUrl ? (
           <>
             <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
@@ -259,6 +343,11 @@ export function VideoPlayer({ url: propUrl, height = 200 }: VideoPlayerProps) {
           <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Off Air</span>
         )}
       </div>
+
+      <style jsx global>{`
+        .gcx-react-player video { object-fit: ${fitMode}; }
+        .gcx-react-player iframe { width: 100% !important; height: 100% !important; }
+      `}</style>
     </section>
   )
 }
