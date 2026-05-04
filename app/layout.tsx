@@ -17,6 +17,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "GCX Market Data Terminal",
   description: "Real-time commodity pricing and analytics for the Ghana Commodity Exchange.",
+  verification: {
+    google: "uazLFVUjO-evWUXVFweoC9ia4LktlTHCo13XpRqLIXo",
+  },
 };
 
 export default function RootLayout({

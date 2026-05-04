@@ -43,7 +43,7 @@ export function TickerBox({ commodity }: { commodity: Commodity }) {
   const color = isPositive ? '#10b981' : '#f43f5e'
 
   return (
-    <div className="w-[220px] sm:w-[280px] h-full flex flex-col justify-center border-r border-border bg-card/40 hover:bg-muted/50 transition-colors px-3 sm:px-4 group relative overflow-hidden">
+    <div className="flex-1 h-full min-w-[220px] sm:min-w-[280px] flex flex-col justify-center border-r border-border bg-card/40 hover:bg-muted/50 transition-colors px-3 sm:px-4 group relative overflow-hidden">
       <div className="flex items-center justify-between mb-0.5 z-10">
         <span className="text-[11px] sm:text-xs font-black text-[#ffaa00] tracking-tight">{commodity.symbol}</span>
         <div className={`text-[9px] sm:text-[10px] font-bold px-1.5 rounded-sm ${isPositive ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
@@ -73,7 +73,20 @@ export function TickerBox({ commodity }: { commodity: Commodity }) {
 }
 
 export function GroupedTicker({ commodities }: { commodities: Commodity[] }) {
-  const itemsPerPage = 5
+  const [itemsPerPage, setItemsPerPage] = useState(5)
+
+  useEffect(() => {
+    // Dynamic items per page based on window width so it fills nicely without stretching too much
+    // Assuming each item needs about 280px minimum. Let's calculate how many fit.
+    const handleResize = () => {
+      const containerWidth = window.innerWidth - 180 // Subtract the "GCX LIVE" label width approx
+      const calculatedItems = Math.max(3, Math.floor(containerWidth / 250))
+      setItemsPerPage(calculatedItems)
+    }
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const groups = useMemo(() => {
     const result: Commodity[][] = []

@@ -1,5 +1,5 @@
 'use client'
-import React from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { format, parseISO, isValid } from 'date-fns'
 import { Area, AreaChart, ResponsiveContainer } from 'recharts'
 import { FullscreenToggle } from './FullscreenToggle'
@@ -121,45 +121,90 @@ export function MarketGrid({ items }: { items: any[] }) {
 }
 
 export function SidePanel({ news }: { news: NewsItem[] }) {
+  const [page, setPage] = useState(0)
+  
+  const sortedNews = useMemo(() => {
+    return [...news].sort((a, b) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime())
+  }, [news])
+
+  const ITEMS_PER_PAGE = 5
+
+  useEffect(() => {
+    if (sortedNews.length <= ITEMS_PER_PAGE) return
+    const timer = setInterval(() => {
+      setPage(p => ((p + 1) * ITEMS_PER_PAGE >= sortedNews.length ? 0 : p + 1))
+    }, 10000)
+    return () => clearInterval(timer)
+  }, [sortedNews.length])
+
+  useEffect(() => {
+    setPage(0)
+  }, [news])
+
+  const visibleNews = sortedNews.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE)
+
+  // Empty slots to maintain grid structure perfectly even if page has fewer items
+  const displayItems = [...visibleNews]
+  while (displayItems.length < ITEMS_PER_PAGE && displayItems.length > 0) {
+    displayItems.push({ id: -displayItems.length, title: '', published_at: '' } as unknown as NewsItem)
+  }
+
   return (
     <aside className="w-full h-full min-w-0 bg-background border-l border-border flex flex-col overflow-hidden">
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="px-4 py-3 border-b border-border bg-muted/20 flex-shrink-0 flex items-center gap-2">
-          <Newspaper size={11} className="text-[#ffaa00]" />
-          <h3 className="text-[#ffaa00] text-[10px] font-black uppercase tracking-[0.2em]">GCX News</h3>
+        <div className="px-4 py-3 border-b border-border bg-muted/20 flex-shrink-0 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Newspaper size={11} className="text-[#ffaa00]" />
+            <h3 className="text-[#ffaa00] text-[10px] font-black uppercase tracking-[0.2em]">GCX News</h3>
+          </div>
+          {sortedNews.length > ITEMS_PER_PAGE && (
+             <div className="flex gap-1.5">
+               {Array.from({ length: Math.ceil(sortedNews.length / ITEMS_PER_PAGE) }).map((_, i) => (
+                 <div key={i} className={`w-1.5 h-1.5 rounded-full transition-colors ${i === page ? 'bg-[#ffaa00]' : 'bg-border'}`} />
+               ))}
+             </div>
+          )}
         </div>
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
-          {news.length === 0 && (
+        <div className="flex-1 p-3 font-sans h-full">
+          {sortedNews.length === 0 && (
             <p className="text-[9px] text-muted-foreground uppercase tracking-widest text-center pt-8">No posts</p>
           )}
-          {news.map(item => (
-            <div
-              key={item.id}
-              className="group p-2.5 border border-border bg-card/30 hover:bg-muted/30 transition-colors cursor-default"
-            >
-              {item.tags && item.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1 mb-1.5">
-                  {item.tags.slice(0, 2).map(tag => (
-                    <span key={tag} className="text-[7px] font-black text-[#ffaa00]/80 uppercase tracking-widest bg-[#ffaa00]/10 px-1 py-0.5">{tag}</span>
-                  ))}
+          {sortedNews.length > 0 && (
+            <div className="h-full grid grid-rows-5 gap-3">
+              {displayItems.map((item, idx) => (
+                <div
+                  key={item.id}
+                  className={`group flex flex-col px-4 py-2 border-l-[3px] transition-all overflow-hidden ${item.title ? 'border-border bg-gradient-to-r from-muted/20 to-transparent hover:border-[#ffaa00] hover:bg-muted/40 cursor-default' : 'border-transparent opacity-0'}`}
+                >
+                  {item.title && (
+                    <div className="flex-1 flex flex-col justify-center h-full">
+                      {item.tags && item.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mb-[1vh] shrink-0">
+                          {item.tags.slice(0, 1).map(tag => (
+                            <span key={tag} className="text-[1vh] font-black text-[#ffaa00]/80 uppercase tracking-widest bg-[#ffaa00]/10 px-[0.5vh] py-[0.25vh] leading-none">{tag}</span>
+                          ))}
+                        </div>
+                      )}
+                      <p className="text-[1.8vh] font-bold text-foreground leading-snug line-clamp-2 break-words shrink-0">{item.title}</p>
+                      {item.excerpt && (
+                        <p className="text-[1.4vh] text-foreground/85 leading-relaxed line-clamp-2 mt-[1vh] break-words shrink-0">
+                          {item.excerpt.replace(/&[a-z]+;|<[^>]+>/gi, ' ').trim()}
+                        </p>
+                      )}
+                      <div className="flex items-center justify-between mt-auto pt-[1vh] gap-2 shrink-0">
+                        {item.author && (
+                          <span className="text-[1.2vh] text-foreground/75 truncate leading-none">{item.author}</span>
+                        )}
+                        <time className="text-[1.2vh] text-foreground/70 tabular-nums ml-auto shrink-0 leading-none">
+                          {formatNewsDate(item.published_at)}
+                        </time>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-              <p className="text-[10px] sm:text-[11px] font-bold text-foreground leading-snug line-clamp-4 break-words">{item.title}</p>
-              {item.excerpt && (
-                <p className="text-[8px] sm:text-[9px] text-muted-foreground leading-snug line-clamp-3 mt-1 break-words">
-                  {item.excerpt.replace(/&[a-z]+;|<[^>]+>/gi, ' ').trim()}
-                </p>
-              )}
-              <div className="flex items-center justify-between mt-1.5 gap-2">
-                {item.author && (
-                  <span className="text-[8px] text-muted-foreground/70 truncate">{item.author}</span>
-                )}
-                <time className="text-[8px] text-muted-foreground/60 tabular-nums ml-auto shrink-0">
-                  {formatNewsDate(item.published_at)}
-                </time>
-              </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
       </div>
     </aside>

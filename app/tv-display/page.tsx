@@ -705,13 +705,13 @@ function TVDisplay() {
             />
           </main>
 
-          <div className="block md:block md:flex-[1.2] md:min-w-[320px] min-w-0 max-h-[30vh] sm:max-h-[32vh] md:max-h-none overflow-y-auto">
+          <div className="block md:block md:flex-[1.5] md:min-w-[400px] min-w-0 max-h-[30vh] sm:max-h-[32vh] md:max-h-none overflow-hidden">
             <SidePanel news={news} />
           </div>
         </div>
 
         {/* Bottom ticker */}
-        <div className="order-3 md:order-none h-[74px] sm:h-[86px] lg:h-[92px] overflow-hidden">
+        <div className="order-3 md:order-none h-24 overflow-hidden">
           <GroupedTicker commodities={enrichedCommodities} />
         </div>
 
@@ -800,11 +800,11 @@ function TVDisplay() {
               <CommodityIndex commodities={commodities} />
             )}
           </main>
-          <div className="block md:block md:flex-[1.2] md:min-w-[320px] min-w-0 max-h-[30vh] sm:max-h-[32vh] md:max-h-none overflow-y-auto">
+          <div className="block md:block md:flex-[1.5] md:min-w-[400px] min-w-0 max-h-[30vh] sm:max-h-[32vh] md:max-h-none overflow-hidden">
             <SidePanel news={news} />
           </div>
         </div>
-        <div className="order-3 md:order-none h-[74px] sm:h-[86px] lg:h-[92px] overflow-hidden">
+        <div className="order-3 md:order-none h-24 overflow-hidden">
           <GroupedTicker commodities={enrichedCommodities} />
         </div>
         <style jsx global>{`
@@ -857,11 +857,11 @@ function TVDisplay() {
             onError={playNextOffline}
           />
         </main>
-        <div className="block md:block md:flex-[1.2] md:min-w-[320px] min-w-0 max-h-[30vh] sm:max-h-[32vh] md:max-h-none overflow-y-auto">
+        <div className="block md:block md:flex-[1.5] md:min-w-[400px] min-w-0 max-h-[30vh] sm:max-h-[32vh] md:max-h-none overflow-hidden">
           <SidePanel news={news} />
         </div>
       </div>
-      <div className="order-3 md:order-none h-[74px] sm:h-[86px] lg:h-[92px] overflow-hidden">
+      <div className="order-3 md:order-none h-24 overflow-hidden">
         <GroupedTicker commodities={enrichedCommodities} />
       </div>
       <style jsx global>{`

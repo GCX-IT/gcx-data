@@ -121,12 +121,14 @@ function TVContent() {
       <TerminalHeader currentTime={currentTime} />
       <MarketGrid items={mainSix} />
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         <main className="flex-[4] flex flex-col bg-background overflow-hidden">
           <VideoPlayer height="100%" />
         </main>
 
-        <SidePanel news={news} />
+        <div className="md:flex-[1.5] w-full md:w-auto md:min-w-[400px] max-h-[30vh] sm:max-h-[32vh] md:max-h-none overflow-hidden">
+          <SidePanel news={news} />
+        </div>
       </div>
 
       <GroupedTicker commodities={enrichedCommodities} />
