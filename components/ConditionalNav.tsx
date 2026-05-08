@@ -7,7 +7,7 @@ import { FullscreenToggle } from "@/components/FullscreenToggle"
 export function ConditionalNav() {
   const pathname = usePathname()
 
-  if (pathname === '/tv-display' || pathname === '/login' || pathname === '/tv') {
+  if (pathname === '/tv-display' || pathname === '/login' || pathname === '/tv' || pathname === '/tv-market') {
     return null
   }
 
@@ -31,7 +31,7 @@ export function ConditionalMain({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   
   // No padding where we hide the navbar
-  if (pathname === '/tv-display' || pathname === '/login' || pathname === '/tv') {
+  if (pathname === '/tv-display' || pathname === '/login' || pathname === '/tv' || pathname === '/tv-market') {
     return <>{children}</>
   }
 

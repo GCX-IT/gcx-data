@@ -22,6 +22,14 @@ function TVDisplayCard() {
           <ExternalLink size={16} />
           OPEN DISPLAY
         </a>
+        <a href="https://www.gcx.com.gh/ticker" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 bg-[#ff4500] text-black px-6 py-3 font-black hover:bg-orange-500 transition">
+          <ExternalLink size={16} />
+          OPEN TICKER
+        </a>
+        <a href="/tv-market" target="_blank" className="inline-flex items-center gap-2 bg-emerald-500 text-black px-6 py-3 font-black hover:bg-emerald-400 transition">
+          <ExternalLink size={16} />
+          OPEN MARKET TABLE
+        </a>
         <button
           onClick={copyLink}
           className="inline-flex items-center gap-2 bg-zinc-800 text-zinc-200 px-6 py-3 font-black hover:bg-zinc-700 transition border border-zinc-700"

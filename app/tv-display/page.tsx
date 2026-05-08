@@ -6,7 +6,8 @@ import { GroupedTicker } from '@/components/TerminalTicker'
 import { VideoPlayer } from '@/components/VideoPlayer'
 import { MarketDataTable } from '@/components/MarketDataTable'
 import { CommodityIndex } from '@/components/CommodityIndex'
-import { FolderOpen, HardDrive, KeyRound, Lock, Maximize2, Minimize2, Upload } from 'lucide-react'
+import { FolderOpen, HardDrive, KeyRound, Lock, Maximize2, Minimize2, Moon, Sun, Upload } from 'lucide-react'
+import { useTheme } from 'next-themes'
 
 const LOCAL_PLAYBACK_SOURCE_KEY = 'gcx_tv_playback_source'
 const LOCAL_OFFLINE_FILE_NAMES_KEY = 'gcx_tv_offline_file_names'
@@ -44,6 +45,7 @@ interface TVConfigData {
 }
 
 function TVDisplay() {
+  const { theme, setTheme } = useTheme()
   const [commodities, setCommodities] = useState<Commodity[]>([])
   const [historyMap, setHistoryMap] = useState<Record<string, { val: number }[]>>({})
   const [news, setNews] = useState<NewsItem[]>([])
@@ -387,8 +389,20 @@ function TVDisplay() {
 
   function renderDisplayControls() {
     const inCooldown = cooldownUntil > Date.now()
+    const isDark = theme !== 'light'
     return (
       <div className="fixed top-2 left-2 right-2 sm:left-auto sm:right-4 sm:top-4 z-50 flex items-center justify-end flex-wrap gap-1.5">
+        <button
+          onClick={() => setTheme(isDark ? 'light' : 'dark')}
+          className={`px-2 sm:px-2.5 py-2 rounded shadow-lg transition text-[10px] sm:text-[11px] font-black uppercase tracking-wide flex items-center gap-1 ${
+            isDark ? 'bg-zinc-900/90 hover:bg-zinc-800 text-yellow-300' : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-800'
+          }`}
+          title="Toggle theme"
+        >
+          {isDark ? <Sun size={14} /> : <Moon size={14} />}
+          <span className="hidden sm:inline">{isDark ? 'Light' : 'Dark'}</span>
+        </button>
+
         <button
           onClick={() => setPinDialogMode(pinHash ? 'unlock' : 'setup')}
           className={`px-2 sm:px-2.5 py-2 rounded shadow-lg transition text-[10px] sm:text-[11px] font-black uppercase tracking-wide flex items-center gap-1 ${
