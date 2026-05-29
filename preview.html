@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Seamless Ticker</title>
+<style>
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #000;
+  }
+
+  /*
+    STRETCH FIX EXPLAINED:
+    The video wall controller receives 1920px and stretches it 6× to 11520px.
+    So everything rendered at normal size appears 6× too wide on screen.
+
+    Solution: We wrap the entire ticker in a container that is scaled DOWN
+    to 1/6 width (scaleX 0.1667) but — critically — we set its real DOM width
+    to 6× the viewport so the browser lays it out at the CORRECT pixel count
+    before scaling. This means translateX animations measure true widths and
+    the seamless loop still works perfectly.
+  */
+
+  /* Outer shell — full screen, clips overflow */
+  .viewport {
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    position: relative;
+    background: #000;
+  }
+
+  /*
+    Inner scaler: 6× wider than viewport in DOM space,
+    squashed back to viewport size via scaleX(1/6).
+    transform-origin left so it aligns to the left edge.
+  */
+  .scaler {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 600vw;          /* 6 screens worth of real pixels */
+    height: 100vh;
+    transform: scaleX(0.16667);
+    transform-origin: left center;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+  }
+
+  .track {
+    display: flex;
+    white-space: nowrap;
+    will-change: transform;
+    /* animation injected by JS once width is known */
+  }
+
+  .strip {
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .segment {
+    display: inline-block;
+    white-space: nowrap;
+    /* Font size × 6 because scaleX(1/6) shrinks it back down visually.
+       So 72px × 6 = 432px here → renders as ~72px on screen after stretch. */
+    font-size: 432px;
+    font-family: 'Courier New', Courier, monospace;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: #00ffcc;
+    padding: 0 360px 0 0;  /* 60px × 6 */
+    flex-shrink: 0;
+  }
+
+  /* Separator bullets between data items */
+  .sep {
+    color: #ffffff44;
+    margin: 0 18px;
+  }
+
+  /* Individual data labels and values */
+  .label {
+    color: #aaffee;
+    font-size: 0.75em;
+    letter-spacing: 0.08em;
+    margin-right: 6px;
+  }
+
+  .up   { color: #00ff88; }
+  .down { color: #ff4466; }
+  .flat { color: #ffdd44; }
+
+  /* Scanline overlay for that broadcast/trading-room feel */
+  .scanlines {
+    pointer-events: none;
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      to bottom,
+      transparent 0px,
+      transparent 3px,
+      rgba(0,0,0,0.18) 3px,
+      rgba(0,0,0,0.18) 4px
+    );
+    z-index: 10;
+  }
+
+  /* Top accent line */
+  .accent-top {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, #00ffcc, #00ffcc, transparent);
+    z-index: 11;
+  }
+
+  /* Bottom accent line */
+  .accent-bottom {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, #00ffcc, #00ffcc, transparent);
+    z-index: 11;
+  }
+</style>
+</head>
+<body>
+
+  <div class="accent-top"></div>
+  <div class="accent-bottom"></div>
+  <div class="scanlines"></div>
+
+  <div class="viewport">
+   <div class="scaler">
+    <div class="track" id="track">
+      <!-- strips built by JS -->
+    </div>
+   </div>
+  </div>
+
+<script>
+  (function () {
+    const track = document.getElementById('track');
+
+    // Seconds for one full strip-width to travel across.
+    // Raise to slow down, lower to speed up.
+    const SCROLL_DURATION = 10;
+
+    // The ticker content — edit this to change what scrolls
+    const items = [
+      { label: 'BTC',     val: '▲ $68,420',   pct: '+2.4%', cls: 'up'   },
+      { label: 'ETH',     val: '▲ $3,510',    pct: '+1.1%', cls: 'up'   },
+      { label: 'NASDAQ',  val: '▲ FUTURES',   pct: 'UP',    cls: 'up'   },
+      { label: 'DOW',     val: '● STABLE',    pct: '0.0%',  cls: 'flat' },
+      { label: 'GOLD',    val: '▼ $2,318',    pct: '-0.3%', cls: 'down' },
+      { label: 'OIL',     val: '▲ $82.40',    pct: '+0.8%', cls: 'up'   },
+      { label: 'USD IDX', val: '▲ STRONG',    pct: '',      cls: 'up'   },
+      { label: 'S&P 500', val: '▲ 5,240',     pct: '+0.6%', cls: 'up'   },
+      { label: 'XRP',     val: '▼ $0.512',    pct: '-0.9%', cls: 'down' },
+      { label: 'AAPL',    val: '▲ $189.30',   pct: '+1.2%', cls: 'up'   },
+    ];
+
+    function buildStrip() {
+      const strip = document.createElement('div');
+      strip.className = 'strip';
+      const seg = document.createElement('span');
+      seg.className = 'segment';
+      items.forEach((item, i) => {
+        seg.innerHTML += `<span class="label">${item.label}</span><span class="${item.cls}">${item.val}${item.pct ? ' &nbsp;' + item.pct : ''}</span>`;
+        seg.innerHTML += `<span class="sep"> &nbsp;|&nbsp; </span>`;
+      });
+      strip.appendChild(seg);
+      return strip;
+    }
+
+    function init() {
+      track.innerHTML = '';
+
+      // Build one master strip and measure it
+      const master = buildStrip();
+      track.appendChild(master);
+
+      // Force layout
+      void master.offsetWidth;
+      const stripW  = master.getBoundingClientRect().width;
+      // scaler is 600vw wide in DOM; screen is 100vw
+      // We need enough copies to fill at least 2× the DOM scaler width
+      const scalerW = window.innerWidth * 6;
+      const copies  = Math.max(2, Math.ceil((scalerW * 2) / stripW));
+
+      for (let i = 1; i < copies; i++) {
+        const clone = buildStrip();
+        track.appendChild(clone);
+      }
+
+      const shiftW   = stripW;   // shift exactly one strip per cycle
+      const duration = SCROLL_DURATION;
+
+      const styleId = 'ticker-kf';
+      let styleEl = document.getElementById(styleId);
+      if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = styleId;
+        document.head.appendChild(styleEl);
+      }
+      styleEl.textContent = `
+        @keyframes tickerScroll {
+          0%   { transform: translateX(0); }
+          100% { transform: translateX(-${shiftW}px); }
+        }
+      `;
+
+      track.style.animation = 'none';
+      void track.offsetWidth;
+      track.style.animation = `tickerScroll ${duration}s linear infinite`;
+    }
+
+    init();
+
+    let resizeTimer;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(init, 200);
+    });
+  })();
+</script>
+
+</body>
+</html>
