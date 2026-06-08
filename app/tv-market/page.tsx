@@ -155,14 +155,14 @@ function TVMarketContent() {
 
       <div className="flex-1 min-h-0 px-8 pt-3 pb-1 overflow-hidden">
         <div key={currentPage} className="h-full market-page-fade">
-          <table className="w-full h-full text-base font-mono market-table">
+          <table className="w-full h-full text-lg font-mono market-table">
             <thead className="border-b-2 border-[#ffaa00]">
               <tr className="text-left">
-                {['Symbol', 'Commodity', 'Open', 'Close', 'High', 'Low', 'Chg %', 'Grade', 'Last Traded Date'].map((h) => (
+                {['Symbol', 'Commodity', 'Open', 'Close', 'High', 'Low', 'Chg %', 'Grade', 'Last Trade'].map((h) => (
                   <th
                     key={h}
-                    className={`py-3 px-4 font-black text-[#ffaa00] uppercase tracking-wider text-xs ${
-                      ['Open', 'Close', 'High', 'Low', 'Chg %'].includes(h) ? 'text-right' : ''
+                    className={`py-3 px-4 font-black text-[#ffaa00] uppercase tracking-wider text-sm ${
+                      ['Open', 'Close', 'High', 'Low', 'Chg %'].includes(h) ? 'text-right' : h === 'Grade' ? 'text-center' : ''
                     }`}
                   >
                     {h}
@@ -178,17 +178,17 @@ function TVMarketContent() {
                     idx % 2 === 0 ? (isDark ? 'bg-zinc-950' : 'bg-zinc-50') : (isDark ? 'bg-black' : 'bg-white')
                   }`}
                 >
-                  <td className={`px-4 text-base font-black tracking-tight ${isDark ? 'text-white' : 'text-zinc-900'}`}>{item.symbol}</td>
-                  <td className={`${isDark ? 'text-zinc-300' : 'text-zinc-700'} px-4 text-base`}>{item.commodity}</td>
-                  <td className={`${isDark ? 'text-zinc-400' : 'text-zinc-500'} px-4 text-right text-base`}>{item.openingPrice?.toFixed(2) || '—'}</td>
-                  <td className={`px-4 text-right text-base font-black ${isDark ? 'text-white' : 'text-zinc-900'}`}>{item.price?.toFixed(2) || '—'}</td>
-                  <td className="px-4 text-right text-emerald-400 text-base">{item.highPrice?.toFixed(2) || '—'}</td>
-                  <td className="px-4 text-right text-rose-400 text-base">{item.lowPrice?.toFixed(2) || '—'}</td>
-                  <td className={`px-4 text-right font-black text-lg ${item.changePercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  <td className={`px-4 text-lg font-black tracking-tight ${isDark ? 'text-white' : 'text-zinc-900'}`}>{item.symbol}</td>
+                  <td className={`${isDark ? 'text-zinc-300' : 'text-zinc-700'} px-4 text-lg whitespace-nowrap`}>{item.commodity}</td>
+                  <td className={`${isDark ? 'text-zinc-400' : 'text-zinc-500'} px-4 text-right text-lg`}>{item.openingPrice?.toFixed(2) || '—'}</td>
+                  <td className={`px-4 text-right text-lg font-black ${isDark ? 'text-white' : 'text-zinc-900'}`}>{item.price?.toFixed(2) || '—'}</td>
+                  <td className="px-4 text-right text-emerald-400 text-lg">{item.highPrice?.toFixed(2) || '—'}</td>
+                  <td className="px-4 text-right text-rose-400 text-lg">{item.lowPrice?.toFixed(2) || '—'}</td>
+                  <td className={`px-4 text-right font-black text-xl ${item.changePercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                     {item.changePercent >= 0 ? '▲' : '▼'}&nbsp;{Math.abs(item.changePercent).toFixed(2)}%
                   </td>
-                  <td className="px-4 text-zinc-500 text-sm">{item.grade || '—'}</td>
-                  <td className="px-4 text-zinc-500 text-sm">{item.lastTradeDate || '—'}</td>
+                  <td className="px-4 text-zinc-500 text-base text-center">{item.grade || '—'}</td>
+                  <td className="px-4 text-zinc-500 text-base">{item.lastTradeDate || '—'}</td>
                 </tr>
               ))}
               {Array.from({ length: Math.max(0, PAGE_SIZE - pageRows.length) }).map((_, idx) => (
@@ -229,7 +229,7 @@ function TVMarketContent() {
           animation: marketPageFade 0.45s ease-out both;
         }
         .market-table {
-          table-layout: fixed;
+          table-layout: auto;
         }
         .market-table tbody {
           display: table-row-group;
