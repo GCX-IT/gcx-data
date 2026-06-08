@@ -124,7 +124,7 @@ function TVMarketContent() {
       <div className={`flex-shrink-0 flex items-center justify-between px-8 pt-6 pb-5 border-b ${isDark ? 'border-zinc-800' : 'border-zinc-200'}`}>
         <div>
           <h2 className="text-4xl font-black text-[#ffaa00] uppercase tracking-wider leading-none">
-            Live Market Data
+            Market Data
           </h2>
           <p className="text-zinc-500 text-xs font-mono mt-1 uppercase tracking-widest">
             Ghana Commodity Exchange · {new Date().toLocaleDateString('en-GB')}
@@ -155,7 +155,7 @@ function TVMarketContent() {
 
       <div className="flex-1 min-h-0 px-8 pt-3 pb-1 overflow-hidden">
         <div key={currentPage} className="h-full market-page-fade">
-          <table className="w-full text-base font-mono">
+          <table className="w-full h-full text-base font-mono market-table">
             <thead className="border-b-2 border-[#ffaa00]">
               <tr className="text-left">
                 {['Symbol', 'Commodity', 'Open', 'Close', 'High', 'Low', 'Chg %', 'Grade', 'Last Traded Date'].map((h) => (
@@ -174,21 +174,31 @@ function TVMarketContent() {
               {pageRows.map((item, idx) => (
                 <tr
                   key={`${item.symbol}-${idx}`}
-                  className={`border-b ${isDark ? 'border-zinc-800/60' : 'border-zinc-200'} ${
+                  className={`border-b market-table-row ${isDark ? 'border-zinc-800/60' : 'border-zinc-200'} ${
                     idx % 2 === 0 ? (isDark ? 'bg-zinc-950' : 'bg-zinc-50') : (isDark ? 'bg-black' : 'bg-white')
                   }`}
                 >
-                  <td className={`py-4 px-4 text-base font-black tracking-tight ${isDark ? 'text-white' : 'text-zinc-900'}`}>{item.symbol}</td>
-                  <td className={`${isDark ? 'text-zinc-300' : 'text-zinc-700'} py-4 px-4 text-base`}>{item.commodity}</td>
-                  <td className={`${isDark ? 'text-zinc-400' : 'text-zinc-500'} py-4 px-4 text-right text-base`}>{item.openingPrice?.toFixed(2) || '—'}</td>
-                  <td className={`py-4 px-4 text-right text-base font-black ${isDark ? 'text-white' : 'text-zinc-900'}`}>{item.price?.toFixed(2) || '—'}</td>
-                  <td className="py-4 px-4 text-right text-emerald-400 text-base">{item.highPrice?.toFixed(2) || '—'}</td>
-                  <td className="py-4 px-4 text-right text-rose-400 text-base">{item.lowPrice?.toFixed(2) || '—'}</td>
-                  <td className={`py-4 px-4 text-right font-black text-lg ${item.changePercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  <td className={`px-4 text-base font-black tracking-tight ${isDark ? 'text-white' : 'text-zinc-900'}`}>{item.symbol}</td>
+                  <td className={`${isDark ? 'text-zinc-300' : 'text-zinc-700'} px-4 text-base`}>{item.commodity}</td>
+                  <td className={`${isDark ? 'text-zinc-400' : 'text-zinc-500'} px-4 text-right text-base`}>{item.openingPrice?.toFixed(2) || '—'}</td>
+                  <td className={`px-4 text-right text-base font-black ${isDark ? 'text-white' : 'text-zinc-900'}`}>{item.price?.toFixed(2) || '—'}</td>
+                  <td className="px-4 text-right text-emerald-400 text-base">{item.highPrice?.toFixed(2) || '—'}</td>
+                  <td className="px-4 text-right text-rose-400 text-base">{item.lowPrice?.toFixed(2) || '—'}</td>
+                  <td className={`px-4 text-right font-black text-lg ${item.changePercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                     {item.changePercent >= 0 ? '▲' : '▼'}&nbsp;{Math.abs(item.changePercent).toFixed(2)}%
                   </td>
-                  <td className="py-4 px-4 text-zinc-500 text-sm">{item.grade || '—'}</td>
-                  <td className="py-4 px-4 text-zinc-500 text-sm">{item.lastTradeDate || '—'}</td>
+                  <td className="px-4 text-zinc-500 text-sm">{item.grade || '—'}</td>
+                  <td className="px-4 text-zinc-500 text-sm">{item.lastTradeDate || '—'}</td>
+                </tr>
+              ))}
+              {Array.from({ length: Math.max(0, PAGE_SIZE - pageRows.length) }).map((_, idx) => (
+                <tr
+                  key={`filler-${idx}`}
+                  className={`border-b market-table-row ${isDark ? 'border-zinc-800/60' : 'border-zinc-200'} ${
+                    (pageRows.length + idx) % 2 === 0 ? (isDark ? 'bg-zinc-950' : 'bg-zinc-50') : (isDark ? 'bg-black' : 'bg-white')
+                  }`}
+                >
+                  <td colSpan={9} className="px-4">&nbsp;</td>
                 </tr>
               ))}
             </tbody>
@@ -217,6 +227,15 @@ function TVMarketContent() {
         }
         .market-page-fade {
           animation: marketPageFade 0.45s ease-out both;
+        }
+        .market-table {
+          table-layout: fixed;
+        }
+        .market-table tbody {
+          display: table-row-group;
+        }
+        .market-table-row {
+          height: calc((100% - 44px) / 10);
         }
       `}</style>
     </div>
