@@ -103,6 +103,21 @@ function TVDisplay() {
     setPinError('')
   }
 
+  // Runs the actual action. Caller must have already verified the PIN — this
+  // does NOT re-check pinHash/isControlsUnlocked, so it is safe to call right
+  // after setting/unlocking the PIN (where that state is still stale this render).
+  function executeAction(action: Exclude<ProtectedAction, null>) {
+    if (action === 'toggle-source') {
+      togglePlaybackSource()
+      return
+    }
+    if (action === 'choose-folder') {
+      chooseOfflineFolder()
+      return
+    }
+    chooseOfflineFiles()
+  }
+
   function triggerProtectedAction(action: Exclude<ProtectedAction, null>) {
     if (!pinHash) {
       setPendingAction(action)
@@ -115,15 +130,7 @@ function TVDisplay() {
       return
     }
 
-    if (action === 'toggle-source') {
-      togglePlaybackSource()
-      return
-    }
-    if (action === 'choose-folder') {
-      chooseOfflineFolder()
-      return
-    }
-    chooseOfflineFiles()
+    executeAction(action)
   }
 
   const toggleFullscreen = () => {
@@ -514,7 +521,7 @@ function TVDisplay() {
       const action = pendingAction
       closePinDialog()
       setPendingAction(null)
-      if (action) triggerProtectedAction(action)
+      if (action) executeAction(action)
       return
     }
 
@@ -542,7 +549,18 @@ function TVDisplay() {
     const action = pendingAction
     closePinDialog()
     setPendingAction(null)
-    if (action) triggerProtectedAction(action)
+    if (action) executeAction(action)
+  }
+
+  function handlePinKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      void submitPinDialog()
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      closePinDialog()
+      setPendingAction(null)
+    }
   }
 
   function renderPinDialog() {
@@ -565,8 +583,10 @@ function TVDisplay() {
           <input
             type="password"
             inputMode="numeric"
+            autoFocus
             value={pinInput}
             onChange={(e) => setPinInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            onKeyDown={handlePinKeyDown}
             className="mt-1 w-full bg-zinc-900 border border-zinc-700 focus:border-[#ffaa00] px-3 py-2 text-sm outline-none"
             placeholder="Enter PIN"
           />
@@ -579,6 +599,7 @@ function TVDisplay() {
                 inputMode="numeric"
                 value={pinConfirmInput}
                 onChange={(e) => setPinConfirmInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                onKeyDown={handlePinKeyDown}
                 className="mt-1 w-full bg-zinc-900 border border-zinc-700 focus:border-[#ffaa00] px-3 py-2 text-sm outline-none"
                 placeholder="Confirm PIN"
               />
