@@ -8,11 +8,11 @@ export async function GET() {
     // Fetch blog posts and news ticker items in parallel with higher limits
     const [postsRes, newsRes] = await Promise.allSettled([
       fetch(`${GCX_BACKEND}/api/posts?limit=100`, {
-        next: { revalidate: 300 },
+        next: { revalidate: 0 },
         headers: { 'Accept': 'application/json' },
       }),
       fetch(`${GCX_BACKEND}/api/news?limit=100`, {
-        next: { revalidate: 120 },
+        next: { revalidate: 0 },
         headers: { 'Accept': 'application/json' },
       }),
     ])
@@ -50,7 +50,14 @@ export async function GET() {
     // Limit to the 5 most recent combined blog+news items
     const limited = items.slice(0, 5)
 
-    return NextResponse.json({ success: true, data: limited, count: limited.length })
+    return NextResponse.json(
+      { success: true, data: limited, count: limited.length },
+      {
+        // The TV fetches news only ONCE per page load (no polling). Kept
+        // uncached so a manual refresh always pulls the latest items.
+        headers: { 'Cache-Control': 'no-store' },
+      },
+    )
   } catch (error) {
     return NextResponse.json({
       success: false,

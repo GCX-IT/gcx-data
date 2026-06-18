@@ -6,10 +6,10 @@ export async function GET() {
   try {
     // Fetch closing prices and symbol metadata in parallel
     const [pricesRes, symbolsRes, historicalRes] = await Promise.all([
-      fetch(`${FIREBASE_BASE_URL}/closing_prices.json`, { next: { revalidate: 300 } }),
-      fetch(`${FIREBASE_BASE_URL}/commodity_symbols.json`, { next: { revalidate: 3600 } }),
+      fetch(`${FIREBASE_BASE_URL}/closing_prices.json`, { next: { revalidate: 0 } }),
+      fetch(`${FIREBASE_BASE_URL}/commodity_symbols.json`, { next: { revalidate: 0 } }),
       // Fetch full data dump for historical pricing
-      fetch(`${FIREBASE_BASE_URL}.json`, { next: { revalidate: 600 } }).catch(() => null)
+      fetch(`${FIREBASE_BASE_URL}.json`, { next: { revalidate: 0 } }).catch(() => null)
     ])
 
     if (!pricesRes.ok) throw new Error(`Firebase prices error: ${pricesRes.status}`)
@@ -93,6 +93,11 @@ export async function GET() {
       count: sorted.length,
       data: sorted,
       historyMap,
+    }, {
+      // The TV fetches prices only ONCE per page load (no polling), so there is
+      // no flood of requests to cache against. Kept uncached so a manual refresh
+      // always pulls the latest closing prices immediately.
+      headers: { 'Cache-Control': 'no-store' },
     })
   } catch (error) {
     console.error('Error fetching market data:', error)

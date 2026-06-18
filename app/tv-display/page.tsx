@@ -194,6 +194,9 @@ function TVDisplay() {
     folderInputRef.current.setAttribute('directory', '')
   }, [])
 
+  // Prices and news are fetched ONCE per page load — no polling. Closing prices
+  // and news change rarely (days to weeks apart), so continuous polling is
+  // wasted cost. Refresh the TV to pull the latest.
   useEffect(() => {
     const fetchPrices = async () => {
       try {
@@ -215,6 +218,17 @@ function TVDisplay() {
       } catch (err) { console.error('News fetch error:', err) }
     }
 
+    fetchPrices()
+    fetchNews()
+  }, [])
+
+  // Config is fetched ONCE per page load — no polling. It changes very rarely
+  // (set-and-forget), so continuous polling is wasted cost. After changing
+  // settings in the admin panel, refresh the TV to pick them up. Offline
+  // displays ignore remote config entirely, so they don't fetch it at all.
+  useEffect(() => {
+    if (playbackSource === 'offline') return
+
     const fetchConfig = async () => {
       try {
         const res = await fetch('/api/tv-config')
@@ -229,25 +243,14 @@ function TVDisplay() {
             images: Array.isArray(result.images) ? result.images : [],
           })
         }
-      } catch (err) { 
+      } catch (err) {
         console.error('Config fetch error:', err)
         // Keep default config on error
       }
     }
 
-    fetchPrices()
-    fetchNews()
     fetchConfig()
-
-    const priceInterval = setInterval(fetchPrices, 30000)
-    const newsInterval = setInterval(fetchNews, 120000)
-    const configInterval = setInterval(fetchConfig, 10000) // fetch config every 10s for admin changes
-    return () => { 
-      clearInterval(priceInterval)
-      clearInterval(newsInterval)
-      clearInterval(configInterval)
-    }
-  }, [])
+  }, [playbackSource])
 
   // Phase rotation logic
   useEffect(() => {

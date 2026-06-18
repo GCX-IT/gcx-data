@@ -45,20 +45,30 @@ const DEFAULT_CONFIG: TVConfig = {
 // Falls back to the VPS address used by gcx-frontend.
 const GCX_BACKEND = process.env.GCX_BACKEND_URL ?? 'http://188.166.159.42:8081'
 
+// The TV display fetches config only ONCE per page load (no polling), so there
+// is no flood of requests to cache against. We deliberately keep it uncached so
+// that a manual refresh always pulls the latest admin settings immediately.
+const CONFIG_CACHE_HEADERS = {
+  'Cache-Control': 'no-store',
+}
+
 export async function GET() {
   try {
     const res = await fetch(`${GCX_BACKEND}/api/tv/config`, {
-      next: { revalidate: 0 }, // always fresh
+      next: { revalidate: 0 }, // always fresh — refresh = latest settings
       headers: { Accept: 'application/json' },
     })
     if (!res.ok) throw new Error(`Backend returned ${res.status}`)
     const data: TVConfig = await res.json()
-    return NextResponse.json({
-      ...DEFAULT_CONFIG,
-      ...data,
-      playlist: Array.isArray(data.playlist) ? data.playlist : [],
-      images: Array.isArray(data.images) ? data.images : [],
-    })
+    return NextResponse.json(
+      {
+        ...DEFAULT_CONFIG,
+        ...data,
+        playlist: Array.isArray(data.playlist) ? data.playlist : [],
+        images: Array.isArray(data.images) ? data.images : [],
+      },
+      { headers: CONFIG_CACHE_HEADERS },
+    )
   } catch (err) {
     console.error('GET /api/tv/config error:', err)
     return NextResponse.json({ ...DEFAULT_CONFIG })
