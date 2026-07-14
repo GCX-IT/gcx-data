@@ -43,11 +43,9 @@ function TVMarketContent() {
     }
 
     fetchPrices()
-    const priceInterval = setInterval(fetchPrices, 30000)
     const tickInterval = setInterval(() => setPageTick((prev) => prev + 1), 1000)
 
     return () => {
-      clearInterval(priceInterval)
       clearInterval(tickInterval)
     }
   }, [])
