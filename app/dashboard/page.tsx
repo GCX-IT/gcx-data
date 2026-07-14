@@ -350,24 +350,20 @@ export default function Dashboard() {
         const result = await response.json()
         if (result.success) {
           setCommodities(result.data)
-          if (!activeSymbol) setActiveSymbol(result.data[0]?.symbol)
-          if (widgets.length === 0) {
-            setWidgets([
+          setActiveSymbol((current) => current || result.data[0]?.symbol)
+          setWidgets((current) => current.length > 0 ? current : [
               { id: 'w1', type: 'price', title: 'Real-Time Price', x: 0, y: 0 },
               { id: 'w2', type: 'chart', title: 'Price Performance', x: 1, y: 0 },
               { id: 'w3', type: 'watchlist', title: 'Market Watchlist', x: 3, y: 0 },
               { id: 'w4', type: 'summary', title: 'Market Summary', x: 0, y: 1 },
               { id: 'w5', type: 'chart', title: 'Volatility Index', x: 1, y: 1 }
             ])
-          }
         }
       } catch (err) { console.error('Fetch error:', err) }
       finally { setLoading(false) }
     }
     fetchPrices()
-    const interval = setInterval(fetchPrices, 30000)
-    return () => clearInterval(interval)
-  }, [activeSymbol, widgets.length])
+  }, [])
 
   const handleMouseDown = (e: React.MouseEvent, widgetId: string) => {
     if ((e.target as HTMLElement).closest('[data-no-drag]')) return

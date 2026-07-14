@@ -94,8 +94,6 @@ export function VideoPlayer({
 
   useEffect(() => {
     fetchConfig()
-    const id = setInterval(fetchConfig, 8000)
-    return () => clearInterval(id)
   }, [fetchConfig])
 
   const effectiveNowPlaying = localOnly

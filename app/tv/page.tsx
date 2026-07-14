@@ -47,10 +47,8 @@ function TVContent() {
     fetchPrices()
     fetchNews()
 
-    const priceInterval = setInterval(fetchPrices, 30000)
-    const newsInterval = setInterval(fetchNews, 120000) // refresh news every 2 min
     const tInterval = setInterval(() => setCurrentTime(new Date()), 1000)
-    return () => { clearInterval(priceInterval); clearInterval(newsInterval); clearInterval(tInterval) }
+    return () => clearInterval(tInterval)
   }, [])
 
   const mainSix = useMemo(() => {
