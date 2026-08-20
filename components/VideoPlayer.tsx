@@ -213,10 +213,13 @@ export function VideoPlayer({
 
   const isFill = height === '100%'
   const containerStyle = expanded
-    ? { position: 'fixed' as const, inset: 0, zIndex: 9999 }
+    ? { position: 'fixed' as const, inset: 0, zIndex: 9999, width: '100vw', height: '100vh' }
     : isFill
     ? { flex: 1, minHeight: 0 }
     : { height }
+
+  // Regular mode can fill/crop the slot; expanded/fullscreen must never stretch.
+  const effectiveFitMode = expanded ? 'contain' : fitMode
 
   function seekBy(delta: number) {
     const player = playerRef.current
@@ -253,15 +256,17 @@ export function VideoPlayer({
         scheduleHideChrome()
       }}
     >
-      {/* LEFT BRAND LABEL */}
-      <div className="flex-shrink-0 w-8 sm:w-[52px] bg-[#ffaa00] text-black flex flex-col items-center justify-center gap-1.5 font-black z-20 shadow-[4px_0_20px_rgba(0,0,0,0.4)]">
-        <Radio size={13} className="animate-pulse" />
-        <span className="hidden sm:inline text-[7px] font-black tracking-widest uppercase [writing-mode:vertical-rl] rotate-180 leading-none">
-          GCX TV
-        </span>
-      </div>
+      {/* LEFT BRAND LABEL — hide in expanded mode so the video can use the full frame */}
+      {!expanded && (
+        <div className="flex-shrink-0 w-8 sm:w-[52px] bg-[#ffaa00] text-black flex flex-col items-center justify-center gap-1.5 font-black z-20 shadow-[4px_0_20px_rgba(0,0,0,0.4)]">
+          <Radio size={13} className="animate-pulse" />
+          <span className="hidden sm:inline text-[7px] font-black tracking-widest uppercase [writing-mode:vertical-rl] rotate-180 leading-none">
+            GCX TV
+          </span>
+        </div>
+      )}
 
-      {/* VIDEO AREA — fills the entire player slot (no letterbox bars) */}
+      {/* VIDEO AREA */}
       <div className="flex-1 relative bg-black overflow-hidden min-w-0 min-h-0">
         {!videoUrl && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-zinc-700">
@@ -279,7 +284,7 @@ export function VideoPlayer({
         )}
 
         {videoUrl && (
-          <div className="absolute inset-0 gcx-react-player">
+          <div className={`absolute inset-0 gcx-react-player ${expanded ? 'gcx-react-player--expanded' : ''}`}>
             <ReactPlayer
               ref={playerRef}
               key={`${mediaKey ?? ''}:${videoUrl}`}
@@ -301,7 +306,7 @@ export function VideoPlayer({
                   },
                 } as any,
               } as any}
-              style={{ objectFit: fitMode, objectPosition: 'center center' }}
+              style={{ objectFit: effectiveFitMode, objectPosition: 'center center' }}
             />
           </div>
         )}
@@ -401,8 +406,8 @@ export function VideoPlayer({
         .gcx-react-player video {
           width: 100% !important;
           height: 100% !important;
-          object-fit: ${fitMode};
-          object-position: center center;
+          object-fit: ${effectiveFitMode} !important;
+          object-position: center center !important;
           background: #000;
         }
         .gcx-react-player iframe {
@@ -410,6 +415,29 @@ export function VideoPlayer({
           height: 100% !important;
           border: 0;
           background: #000;
+        }
+        /* Expanded / fullscreen: center and preserve source aspect ratio (no stretch). */
+        .gcx-react-player--expanded {
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+        }
+        .gcx-react-player--expanded > * {
+          width: 100% !important;
+          height: 100% !important;
+          max-width: 100% !important;
+          max-height: 100% !important;
+        }
+        .gcx-react-player--expanded video {
+          object-fit: contain !important;
+          object-position: center center !important;
+        }
+        .gcx-react-player--expanded iframe {
+          /* Keep YouTube/embed frames at a 16:9 box inside the viewport so they don't stretch. */
+          width: min(100vw, calc(100vh * 16 / 9)) !important;
+          height: min(100vh, calc(100vw * 9 / 16)) !important;
+          max-width: 100% !important;
+          max-height: 100% !important;
         }
       `}</style>
     </section>
