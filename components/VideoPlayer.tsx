@@ -1,5 +1,5 @@
 ﻿'use client'
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react'
 import { Play, Pause, Volume2, VolumeX, Maximize2, Minimize2, Radio, Settings, SkipBack, SkipForward, Rewind, FastForward } from 'lucide-react'
 import Link from 'next/link'
 import ReactPlayer from 'react-player'
@@ -64,7 +64,11 @@ export function VideoPlayer({
   const [overrideNowPlaying, setOverrideNowPlaying] = useState<{ id: string | null; url: string | null } | null>(null)
   const lastServerNowPlayingId = useRef<string | null>(null)
   const playerRef = useRef<any>(null)
+  const videoPaneRef = useRef<HTMLDivElement>(null)
   const chromeHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [pageFullscreen, setPageFullscreen] = useState(false)
+  const [paneSize, setPaneSize] = useState({ w: 0, h: 0 })
+  const [sourceAspect, setSourceAspect] = useState(16 / 9)
 
   function clearChromeHideTimer() {
     if (chromeHideTimerRef.current) {
@@ -88,6 +92,13 @@ export function VideoPlayer({
 
   useEffect(() => {
     return () => clearChromeHideTimer()
+  }, [])
+
+  useEffect(() => {
+    const sync = () => setPageFullscreen(!!document.fullscreenElement)
+    sync()
+    document.addEventListener('fullscreenchange', sync)
+    return () => document.removeEventListener('fullscreenchange', sync)
   }, [])
 
   const fetchConfig = useCallback(async () => {
@@ -134,6 +145,27 @@ export function VideoPlayer({
   const loopPlaylist = config?.loop ?? true
 
   const videoUrl = effectiveNowPlaying || ''
+
+  useEffect(() => {
+    setSourceAspect(16 / 9)
+  }, [videoUrl])
+
+  useLayoutEffect(() => {
+    const el = videoPaneRef.current
+    if (!el) return
+    const update = () => {
+      const rect = el.getBoundingClientRect()
+      setPaneSize({ w: rect.width, h: rect.height })
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    window.addEventListener('resize', update)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', update)
+    }
+  }, [expanded, videoUrl])
 
   const canAutoAdvance = useMemo(() => {
     if (localOnly) return false
@@ -213,13 +245,34 @@ export function VideoPlayer({
 
   const isFill = height === '100%'
   const containerStyle = expanded
-    ? { position: 'fixed' as const, inset: 0, zIndex: 9999, width: '100vw', height: '100vh' }
+    ? { position: 'fixed' as const, inset: 0, zIndex: 9999, width: '100%', height: '100%' }
     : isFill
-    ? { flex: 1, minHeight: 0 }
+    ? { flex: 1, minHeight: 0, minWidth: 0, width: '100%' }
     : { height }
 
-  // Regular mode can fill/crop the slot; expanded/fullscreen must never stretch.
-  const effectiveFitMode = expanded ? 'contain' : fitMode
+  // Live-screen browser fullscreen still shows the news sidebar/ticker.
+  // Size the picture to this player pane, never the full viewport.
+  const effectiveFitMode = expanded || pageFullscreen ? 'contain' : fitMode
+
+  const playerBox = useMemo(() => {
+    const { w, h } = paneSize
+    if (w < 2 || h < 2) return { width: '100%' as const, height: '100%' as const }
+    if (effectiveFitMode === 'cover') {
+      return { width: '100%' as const, height: '100%' as const }
+    }
+    const paneAspect = w / h
+    if (paneAspect > sourceAspect) {
+      return { width: Math.floor(h * sourceAspect), height: Math.floor(h) }
+    }
+    return { width: Math.floor(w), height: Math.floor(w / sourceAspect) }
+  }, [paneSize, sourceAspect, effectiveFitMode])
+
+  function captureSourceAspect() {
+    const media = videoPaneRef.current?.querySelector('video') as HTMLVideoElement | null
+    if (media && media.videoWidth > 0 && media.videoHeight > 0) {
+      setSourceAspect(media.videoWidth / media.videoHeight)
+    }
+  }
 
   function seekBy(delta: number) {
     const player = playerRef.current
@@ -266,8 +319,8 @@ export function VideoPlayer({
         </div>
       )}
 
-      {/* VIDEO AREA */}
-      <div className="flex-1 relative bg-black overflow-hidden min-w-0 min-h-0">
+      {/* VIDEO AREA — clipped to this column so it cannot slide under the news sidebar */}
+      <div ref={videoPaneRef} className="flex-1 relative bg-black overflow-hidden min-w-0 min-h-0">
         {!videoUrl && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-zinc-700">
             <Radio size={28} />
@@ -284,30 +337,37 @@ export function VideoPlayer({
         )}
 
         {videoUrl && (
-          <div className={`absolute inset-0 gcx-react-player ${expanded ? 'gcx-react-player--expanded' : ''}`}>
-            <ReactPlayer
-              ref={playerRef}
-              key={`${mediaKey ?? ''}:${videoUrl}`}
-              src={videoUrl}
-              width="100%"
-              height="100%"
-              playing={!resolvedPaused}
-              muted={muted}
-              controls={false}
-              playsInline
-              onEnded={() => { void handleEnded() }}
-              onError={() => { void handleError() }}
-              config={{
-                youtube: {
-                  playerVars: {
-                    autoplay: 1,
-                    modestbranding: 1,
-                    rel: 0,
-                  },
-                } as any,
-              } as any}
-              style={{ objectFit: effectiveFitMode, objectPosition: 'center center' }}
-            />
+          <div className="absolute inset-0 flex items-center justify-center overflow-hidden gcx-react-player">
+            <div
+              className="relative overflow-hidden bg-black"
+              style={{ width: playerBox.width, height: playerBox.height }}
+            >
+              <ReactPlayer
+                ref={playerRef}
+                key={`${mediaKey ?? ''}:${videoUrl}`}
+                src={videoUrl}
+                width="100%"
+                height="100%"
+                playing={!resolvedPaused}
+                muted={muted}
+                controls={false}
+                playsInline
+                onReady={captureSourceAspect}
+                onDurationChange={captureSourceAspect}
+                onEnded={() => { void handleEnded() }}
+                onError={() => { void handleError() }}
+                config={{
+                  youtube: {
+                    playerVars: {
+                      autoplay: 1,
+                      modestbranding: 1,
+                      rel: 0,
+                    },
+                  } as any,
+                } as any}
+                style={{ objectFit: effectiveFitMode, objectPosition: 'center center' }}
+              />
+            </div>
           </div>
         )}
       </div>
@@ -397,15 +457,14 @@ export function VideoPlayer({
       </div>
 
       <style jsx global>{`
-        .gcx-react-player,
-        .gcx-react-player > * {
-          width: 100% !important;
-          height: 100% !important;
-          background: #000;
+        .gcx-react-player {
+          overflow: hidden;
         }
         .gcx-react-player video {
           width: 100% !important;
           height: 100% !important;
+          max-width: 100% !important;
+          max-height: 100% !important;
           object-fit: ${effectiveFitMode} !important;
           object-position: center center !important;
           background: #000;
@@ -413,31 +472,10 @@ export function VideoPlayer({
         .gcx-react-player iframe {
           width: 100% !important;
           height: 100% !important;
+          max-width: 100% !important;
+          max-height: 100% !important;
           border: 0;
           background: #000;
-        }
-        /* Expanded / fullscreen: center and preserve source aspect ratio (no stretch). */
-        .gcx-react-player--expanded {
-          display: flex !important;
-          align-items: center !important;
-          justify-content: center !important;
-        }
-        .gcx-react-player--expanded > * {
-          width: 100% !important;
-          height: 100% !important;
-          max-width: 100% !important;
-          max-height: 100% !important;
-        }
-        .gcx-react-player--expanded video {
-          object-fit: contain !important;
-          object-position: center center !important;
-        }
-        .gcx-react-player--expanded iframe {
-          /* Keep YouTube/embed frames at a 16:9 box inside the viewport so they don't stretch. */
-          width: min(100vw, calc(100vh * 16 / 9)) !important;
-          height: min(100vh, calc(100vw * 9 / 16)) !important;
-          max-width: 100% !important;
-          max-height: 100% !important;
         }
       `}</style>
     </section>
