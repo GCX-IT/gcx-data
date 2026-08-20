@@ -53,16 +53,42 @@ export function VideoPlayer({
   onPrev,
   onNext,
   seekStepSeconds = 10,
-  fitMode = 'contain',
+  fitMode = 'cover',
   localOnly = false,
 }: VideoPlayerProps) {
   const [config, setConfig] = useState<TVConfig | null>(null)
   const [muted, setMuted] = useState(true)
   const [isPausedLocal, setIsPausedLocal] = useState(false)
   const [expanded, setExpanded] = useState(false)
+  const [chromeVisible, setChromeVisible] = useState(false)
   const [overrideNowPlaying, setOverrideNowPlaying] = useState<{ id: string | null; url: string | null } | null>(null)
   const lastServerNowPlayingId = useRef<string | null>(null)
   const playerRef = useRef<any>(null)
+  const chromeHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function clearChromeHideTimer() {
+    if (chromeHideTimerRef.current) {
+      clearTimeout(chromeHideTimerRef.current)
+      chromeHideTimerRef.current = null
+    }
+  }
+
+  function showChrome() {
+    clearChromeHideTimer()
+    setChromeVisible(true)
+  }
+
+  function scheduleHideChrome() {
+    clearChromeHideTimer()
+    chromeHideTimerRef.current = setTimeout(() => {
+      setChromeVisible(false)
+      chromeHideTimerRef.current = null
+    }, 1800)
+  }
+
+  useEffect(() => {
+    return () => clearChromeHideTimer()
+  }, [])
 
   const fetchConfig = useCallback(async () => {
     if (localOnly || propUrl !== undefined) return
@@ -209,11 +235,23 @@ export function VideoPlayer({
   }
 
   const resolvedPaused = typeof controlledPaused === 'boolean' ? controlledPaused : isPausedLocal
+  const overlaysVisible = chromeVisible || resolvedPaused
 
   return (
     <section
-      className="relative bg-black border-b border-border flex items-stretch overflow-hidden transition-all duration-300"
+      className="group relative bg-black border-b border-border flex items-stretch overflow-hidden transition-all duration-300"
       style={containerStyle}
+      onMouseEnter={showChrome}
+      onMouseLeave={() => {
+        clearChromeHideTimer()
+        setChromeVisible(false)
+      }}
+      onMouseMove={showChrome}
+      onFocusCapture={showChrome}
+      onTouchStart={() => {
+        showChrome()
+        scheduleHideChrome()
+      }}
     >
       {/* LEFT BRAND LABEL */}
       <div className="flex-shrink-0 w-8 sm:w-[52px] bg-[#ffaa00] text-black flex flex-col items-center justify-center gap-1.5 font-black z-20 shadow-[4px_0_20px_rgba(0,0,0,0.4)]">
@@ -223,8 +261,8 @@ export function VideoPlayer({
         </span>
       </div>
 
-      {/* VIDEO AREA */}
-      <div className="flex-1 relative bg-black overflow-hidden">
+      {/* VIDEO AREA — fills the entire player slot (no letterbox bars) */}
+      <div className="flex-1 relative bg-black overflow-hidden min-w-0 min-h-0">
         {!videoUrl && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-zinc-700">
             <Radio size={28} />
@@ -241,7 +279,7 @@ export function VideoPlayer({
         )}
 
         {videoUrl && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black gcx-react-player">
+          <div className="absolute inset-0 gcx-react-player">
             <ReactPlayer
               ref={playerRef}
               key={`${mediaKey ?? ''}:${videoUrl}`}
@@ -269,8 +307,12 @@ export function VideoPlayer({
         )}
       </div>
 
-      {/* BOTTOM-RIGHT CONTROLS */}
-      <div className="absolute bottom-2 left-2 right-2 sm:left-auto sm:right-3 flex items-center justify-end flex-wrap gap-1.5 z-30">
+      {/* BOTTOM-RIGHT CONTROLS — hidden while playing until hover */}
+      <div
+        className={`absolute bottom-2 left-2 right-2 sm:left-auto sm:right-3 flex items-center justify-end flex-wrap gap-1.5 z-30 transition-opacity duration-200 ${
+          overlaysVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        }`}
+      >
         <button
           onClick={() => seekBy(-Math.abs(seekStepSeconds))}
           title={`Back ${seekStepSeconds}s`}
@@ -333,8 +375,12 @@ export function VideoPlayer({
         </button>
       </div>
 
-      {/* TOP-RIGHT: LIVE / OFF AIR */}
-      <div className="absolute top-2 right-2 sm:right-3 flex items-center gap-1.5 z-30 bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded-sm">
+      {/* TOP-RIGHT: LIVE / OFF AIR — same hover-only chrome */}
+      <div
+        className={`absolute top-2 right-2 sm:right-3 flex items-center gap-1.5 z-30 bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded-sm transition-opacity duration-200 ${
+          overlaysVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        }`}
+      >
         {videoUrl ? (
           <>
             <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
@@ -362,6 +408,7 @@ export function VideoPlayer({
         .gcx-react-player iframe {
           width: 100% !important;
           height: 100% !important;
+          border: 0;
           background: #000;
         }
       `}</style>
