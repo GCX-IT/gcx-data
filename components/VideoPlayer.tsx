@@ -16,11 +16,16 @@ interface VideoPlayerProps {
   onPrev?: () => void
   onNext?: () => void
   seekStepSeconds?: number
-  fitMode?: 'cover' | 'contain'
+  /** 'auto' fills the frame when the crop is negligible, otherwise letterboxes. */
+  fitMode?: 'auto' | 'cover' | 'contain'
   localOnly?: boolean
 }
 
 const TOKEN_KEY = 'gcx_auth_token'
+
+// Up to this share of the picture may be cropped to remove black bars. Beyond it,
+// too much of the frame would be lost, so the whole picture is shown instead.
+const MAX_AUTO_CROP = 0.12
 
 interface PlaylistItem {
   id: string
@@ -53,7 +58,7 @@ export function VideoPlayer({
   onPrev,
   onNext,
   seekStepSeconds = 10,
-  fitMode = 'cover',
+  fitMode = 'auto',
   localOnly = false,
 }: VideoPlayerProps) {
   const [config, setConfig] = useState<TVConfig | null>(null)
@@ -242,27 +247,35 @@ export function VideoPlayer({
     ? { flex: 1, minHeight: 0, minWidth: 0, width: '100%' }
     : { height }
 
-  // Never stretch: the picture keeps its source ratio and is always sized against
-  // this player pane (in page fullscreen the pane excludes the news sidebar/ticker).
-  const effectiveFitMode = fitMode
-
-  const playerBox = useMemo(() => {
+  // The picture never stretches: it keeps its source ratio and is sized against this
+  // pane (in page fullscreen the pane already excludes the news sidebar and ticker).
+  // When the pane and the video are close in shape, the small overflow is cropped so
+  // no black bars show; when they differ a lot, the whole frame is shown instead.
+  const { playerBox, resolvedFit } = useMemo(() => {
     const { w, h } = paneSize
-    if (w < 2 || h < 2) return { width: '100%' as const, height: '100%' as const }
-    const paneIsWiderThanSource = w / h > sourceAspect
-
-    // Cover: match the long edge and let the pane crop the overflow, so there are
-    // no black bars above/below the video.
-    if (effectiveFitMode === 'cover') {
-      return paneIsWiderThanSource
-        ? { width: Math.ceil(w), height: Math.ceil(w / sourceAspect) }
-        : { width: Math.ceil(h * sourceAspect), height: Math.ceil(h) }
+    if (w < 2 || h < 2) {
+      return { playerBox: { width: '100%' as const, height: '100%' as const }, resolvedFit: 'contain' as const }
     }
 
-    return paneIsWiderThanSource
-      ? { width: Math.floor(h * sourceAspect), height: Math.floor(h) }
-      : { width: Math.floor(w), height: Math.floor(w / sourceAspect) }
-  }, [paneSize, sourceAspect, effectiveFitMode])
+    const ratio = w / h / sourceAspect
+    const croppedShare = 1 - Math.min(ratio, 1 / ratio)
+    const fill = fitMode === 'cover' || (fitMode === 'auto' && croppedShare <= MAX_AUTO_CROP)
+    const paneIsWiderThanSource = ratio > 1
+
+    // Round outward when filling and inward when letterboxing, so rounding never
+    // leaves a hairline bar or clips an extra pixel.
+    const round = fill ? Math.ceil : Math.floor
+    const matchWidth = { width: round(w), height: round(w / sourceAspect) }
+    const matchHeight = { width: round(h * sourceAspect), height: round(h) }
+
+    // Filling matches the pane's long edge and overflows the short one (cropped by the
+    // pane); showing the whole frame matches the short edge and leaves bars.
+    const box = paneIsWiderThanSource
+      ? (fill ? matchWidth : matchHeight)
+      : (fill ? matchHeight : matchWidth)
+
+    return { playerBox: box, resolvedFit: fill ? ('cover' as const) : ('contain' as const) }
+  }, [paneSize, sourceAspect, fitMode])
 
   function captureSourceAspect() {
     const media = videoPaneRef.current?.querySelector('video') as HTMLVideoElement | null
@@ -362,7 +375,7 @@ export function VideoPlayer({
                     },
                   } as any,
                 } as any}
-                style={{ objectFit: effectiveFitMode, objectPosition: 'center center' }}
+                style={{ objectFit: resolvedFit, objectPosition: 'center center' }}
               />
             </div>
           </div>
@@ -464,7 +477,7 @@ export function VideoPlayer({
           height: 100% !important;
           max-width: 100% !important;
           max-height: 100% !important;
-          object-fit: ${effectiveFitMode} !important;
+          object-fit: ${resolvedFit} !important;
           object-position: center center !important;
           background: #000;
         }
