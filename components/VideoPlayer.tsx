@@ -50,7 +50,7 @@ export function VideoPlayer({
   onPrev,
   onNext,
   seekStepSeconds = 10,
-  fitMode = 'cover',
+  fitMode = 'contain',
   localOnly = false,
 }: VideoPlayerProps) {
   const [config, setConfig] = useState<TVConfig | null>(null)
@@ -238,7 +238,7 @@ export function VideoPlayer({
         )}
 
         {videoUrl && (
-          <div className="absolute inset-0 gcx-react-player">
+          <div className="absolute inset-0 flex items-center justify-center bg-black gcx-react-player">
             <ReactPlayer
               ref={playerRef}
               key={videoUrl}
@@ -260,7 +260,7 @@ export function VideoPlayer({
                   },
                 } as any,
               } as any}
-              style={{ objectFit: fitMode }}
+              style={{ objectFit: fitMode, objectPosition: 'center center' }}
             />
           </div>
         )}
@@ -343,8 +343,24 @@ export function VideoPlayer({
       </div>
 
       <style jsx global>{`
-        .gcx-react-player video { object-fit: ${fitMode}; }
-        .gcx-react-player iframe { width: 100% !important; height: 100% !important; }
+        .gcx-react-player,
+        .gcx-react-player > * {
+          width: 100% !important;
+          height: 100% !important;
+          background: #000;
+        }
+        .gcx-react-player video {
+          width: 100% !important;
+          height: 100% !important;
+          object-fit: ${fitMode};
+          object-position: center center;
+          background: #000;
+        }
+        .gcx-react-player iframe {
+          width: 100% !important;
+          height: 100% !important;
+          background: #000;
+        }
       `}</style>
     </section>
   )
