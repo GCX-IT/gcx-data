@@ -6,6 +6,8 @@ import ReactPlayer from 'react-player'
 
 interface VideoPlayerProps {
   url?: string
+  /** Forces a remount when the same URL should restart (e.g. offline playlist loop). */
+  mediaKey?: string | number
   height?: number | string
   onEnded?: () => void
   onError?: () => void
@@ -42,6 +44,7 @@ function safeArray<T>(v: unknown): T[] {
 
 export function VideoPlayer({
   url: propUrl,
+  mediaKey,
   height = 200,
   onEnded,
   onError,
@@ -241,7 +244,7 @@ export function VideoPlayer({
           <div className="absolute inset-0 flex items-center justify-center bg-black gcx-react-player">
             <ReactPlayer
               ref={playerRef}
-              key={videoUrl}
+              key={`${mediaKey ?? ''}:${videoUrl}`}
               src={videoUrl}
               width="100%"
               height="100%"
