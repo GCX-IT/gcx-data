@@ -66,7 +66,6 @@ export function VideoPlayer({
   const playerRef = useRef<any>(null)
   const videoPaneRef = useRef<HTMLDivElement>(null)
   const chromeHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [pageFullscreen, setPageFullscreen] = useState(false)
   const [paneSize, setPaneSize] = useState({ w: 0, h: 0 })
   const [sourceAspect, setSourceAspect] = useState(16 / 9)
 
@@ -92,13 +91,6 @@ export function VideoPlayer({
 
   useEffect(() => {
     return () => clearChromeHideTimer()
-  }, [])
-
-  useEffect(() => {
-    const sync = () => setPageFullscreen(!!document.fullscreenElement)
-    sync()
-    document.addEventListener('fullscreenchange', sync)
-    return () => document.removeEventListener('fullscreenchange', sync)
   }, [])
 
   const fetchConfig = useCallback(async () => {
@@ -250,21 +242,26 @@ export function VideoPlayer({
     ? { flex: 1, minHeight: 0, minWidth: 0, width: '100%' }
     : { height }
 
-  // Live-screen browser fullscreen still shows the news sidebar/ticker.
-  // Size the picture to this player pane, never the full viewport.
-  const effectiveFitMode = expanded || pageFullscreen ? 'contain' : fitMode
+  // Never stretch: the picture keeps its source ratio and is always sized against
+  // this player pane (in page fullscreen the pane excludes the news sidebar/ticker).
+  const effectiveFitMode = fitMode
 
   const playerBox = useMemo(() => {
     const { w, h } = paneSize
     if (w < 2 || h < 2) return { width: '100%' as const, height: '100%' as const }
+    const paneIsWiderThanSource = w / h > sourceAspect
+
+    // Cover: match the long edge and let the pane crop the overflow, so there are
+    // no black bars above/below the video.
     if (effectiveFitMode === 'cover') {
-      return { width: '100%' as const, height: '100%' as const }
+      return paneIsWiderThanSource
+        ? { width: Math.ceil(w), height: Math.ceil(w / sourceAspect) }
+        : { width: Math.ceil(h * sourceAspect), height: Math.ceil(h) }
     }
-    const paneAspect = w / h
-    if (paneAspect > sourceAspect) {
-      return { width: Math.floor(h * sourceAspect), height: Math.floor(h) }
-    }
-    return { width: Math.floor(w), height: Math.floor(w / sourceAspect) }
+
+    return paneIsWiderThanSource
+      ? { width: Math.floor(h * sourceAspect), height: Math.floor(h) }
+      : { width: Math.floor(w), height: Math.floor(w / sourceAspect) }
   }, [paneSize, sourceAspect, effectiveFitMode])
 
   function captureSourceAspect() {
@@ -295,7 +292,7 @@ export function VideoPlayer({
 
   return (
     <section
-      className="group relative bg-black border-b border-border flex items-stretch overflow-hidden transition-all duration-300"
+      className={`group relative bg-black flex items-stretch overflow-hidden transition-all duration-300 ${expanded ? '' : 'border-b border-border'}`}
       style={containerStyle}
       onMouseEnter={showChrome}
       onMouseLeave={() => {
@@ -339,7 +336,7 @@ export function VideoPlayer({
         {videoUrl && (
           <div className="absolute inset-0 flex items-center justify-center overflow-hidden gcx-react-player">
             <div
-              className="relative overflow-hidden bg-black"
+              className="relative shrink-0 overflow-hidden bg-black"
               style={{ width: playerBox.width, height: playerBox.height }}
             >
               <ReactPlayer
@@ -440,21 +437,23 @@ export function VideoPlayer({
         </button>
       </div>
 
-      {/* TOP-RIGHT: LIVE / OFF AIR — same hover-only chrome */}
-      <div
-        className={`absolute top-2 right-2 sm:right-3 flex items-center gap-1.5 z-30 bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded-sm transition-opacity duration-200 ${
-          overlaysVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
-        }`}
-      >
-        {videoUrl ? (
-          <>
-            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
-            <span className="text-[9px] font-black text-white uppercase tracking-widest">Live</span>
-          </>
-        ) : (
-          <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Off Air</span>
-        )}
-      </div>
+      {/* TOP-RIGHT: LIVE / OFF AIR — hidden in video-only fullscreen */}
+      {!expanded && (
+        <div
+          className={`absolute top-2 right-2 sm:right-3 flex items-center gap-1.5 z-30 bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded-sm transition-opacity duration-200 ${
+            overlaysVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+          }`}
+        >
+          {videoUrl ? (
+            <>
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+              <span className="text-[9px] font-black text-white uppercase tracking-widest">Live</span>
+            </>
+          ) : (
+            <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Off Air</span>
+          )}
+        </div>
+      )}
 
       <style jsx global>{`
         .gcx-react-player {

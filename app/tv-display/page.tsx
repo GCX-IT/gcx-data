@@ -829,7 +829,7 @@ function TVDisplay() {
 
         {/* Main content area: video + news sidebar */}
         <div className="order-1 md:order-none flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
-          <main className="relative z-0 flex-1 md:flex-[5] min-w-0 flex flex-col bg-background overflow-hidden min-h-[40vh] sm:min-h-[46vh] md:min-h-0">
+          <main className="flex-1 md:flex-[5] min-w-0 flex flex-col bg-background overflow-hidden min-h-[40vh] sm:min-h-[46vh] md:min-h-0">
             <VideoPlayer
               height="100%"
               url={activeVideoUrl}
@@ -844,7 +844,7 @@ function TVDisplay() {
             />
           </main>
 
-          <div className="relative z-10 block md:flex-[1.5] md:w-[30%] md:min-w-[280px] md:max-w-[420px] md:flex-none min-w-0 max-h-[30vh] sm:max-h-[32vh] md:max-h-none overflow-hidden bg-background">
+          <div className="block md:flex-[1.5] md:w-[30%] md:min-w-[280px] md:max-w-[420px] md:flex-none min-w-0 max-h-[30vh] sm:max-h-[32vh] md:max-h-none overflow-hidden bg-background">
             <SidePanel news={news} />
           </div>
         </div>
@@ -929,7 +929,7 @@ function TVDisplay() {
           </div>
         )}
         <div className="order-1 md:order-none flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
-          <main className="relative z-0 flex-1 md:flex-[5] min-w-0 flex flex-col bg-background overflow-hidden min-h-[40vh] sm:min-h-[46vh] md:min-h-0">
+          <main className="flex-1 md:flex-[5] min-w-0 flex flex-col bg-background overflow-hidden min-h-[40vh] sm:min-h-[46vh] md:min-h-0">
             {currentImage ? (
               <img
                 key={currentImage.url}
@@ -941,7 +941,7 @@ function TVDisplay() {
               <CommodityIndex commodities={commodities} />
             )}
           </main>
-          <div className="relative z-10 block md:flex-[1.5] md:w-[30%] md:min-w-[280px] md:max-w-[420px] md:flex-none min-w-0 max-h-[30vh] sm:max-h-[32vh] md:max-h-none overflow-hidden bg-background">
+          <div className="block md:flex-[1.5] md:w-[30%] md:min-w-[280px] md:max-w-[420px] md:flex-none min-w-0 max-h-[30vh] sm:max-h-[32vh] md:max-h-none overflow-hidden bg-background">
             <SidePanel news={news} />
           </div>
         </div>
@@ -986,7 +986,7 @@ function TVDisplay() {
         </div>
       )}
       <div className="order-1 md:order-none flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
-        <main className="relative z-0 flex-1 md:flex-[5] min-w-0 flex flex-col bg-background overflow-hidden min-h-[40vh] sm:min-h-[46vh] md:min-h-0">
+        <main className="flex-1 md:flex-[5] min-w-0 flex flex-col bg-background overflow-hidden min-h-[40vh] sm:min-h-[46vh] md:min-h-0">
           <VideoPlayer
             height="100%"
             url={activeVideoUrl}
@@ -1000,7 +1000,7 @@ function TVDisplay() {
             onError={playbackSource === 'offline' ? playNextOffline : undefined}
           />
         </main>
-        <div className="relative z-10 block md:flex-[1.5] md:w-[30%] md:min-w-[280px] md:max-w-[420px] md:flex-none min-w-0 max-h-[30vh] sm:max-h-[32vh] md:max-h-none overflow-hidden bg-background">
+        <div className="block md:flex-[1.5] md:w-[30%] md:min-w-[280px] md:max-w-[420px] md:flex-none min-w-0 max-h-[30vh] sm:max-h-[32vh] md:max-h-none overflow-hidden bg-background">
           <SidePanel news={news} />
         </div>
       </div>
