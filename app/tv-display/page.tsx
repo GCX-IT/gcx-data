@@ -6,7 +6,7 @@ import { GroupedTicker } from '@/components/TerminalTicker'
 import { VideoPlayer } from '@/components/VideoPlayer'
 import { MarketDataTable } from '@/components/MarketDataTable'
 import { CommodityIndex } from '@/components/CommodityIndex'
-import { FolderOpen, HardDrive, KeyRound, Lock, Maximize2, Minimize2, Moon, Sun, Upload } from 'lucide-react'
+import { FolderOpen, HardDrive, KeyRound, ListMusic, Lock, Maximize2, Minimize2, Moon, Plus, Sun, Upload } from 'lucide-react'
 import { useTheme } from 'next-themes'
 
 const LOCAL_PLAYBACK_SOURCE_KEY = 'gcx_tv_playback_source'
@@ -18,7 +18,8 @@ const LOCAL_PIN_COOLDOWN_MS = 30 * 1000
 
 type PlaybackSource = 'online' | 'offline'
 type PinDialogMode = 'setup' | 'unlock' | null
-type ProtectedAction = 'toggle-source' | 'choose-files' | 'choose-folder' | null
+type ProtectedAction = 'toggle-source' | 'choose-files' | 'choose-folder' | 'add-files' | null
+type OfflinePickMode = 'replace' | 'append'
 
 interface Commodity {
   symbol: string;
@@ -67,6 +68,8 @@ function TVDisplay() {
   const [offlineNeedsReselect, setOfflineNeedsReselect] = useState(false)
   const [currentOfflineIndex, setCurrentOfflineIndex] = useState(0)
   const [offlinePaused, setOfflinePaused] = useState(false)
+  const [offlinePlayGeneration, setOfflinePlayGeneration] = useState(0)
+  const [showOfflineQueue, setShowOfflineQueue] = useState(false)
   const [pinHash, setPinHash] = useState<string | null>(null)
   const [isControlsUnlocked, setIsControlsUnlocked] = useState(false)
   const [pinDialogMode, setPinDialogMode] = useState<PinDialogMode>(null)
@@ -79,6 +82,8 @@ function TVDisplay() {
   const unlockTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
+  const offlineFileUrlsRef = useRef<string[]>([])
+  const offlinePickModeRef = useRef<OfflinePickMode>('replace')
 
   async function hashPin(value: string): Promise<string> {
     const bytes = new TextEncoder().encode(value)
@@ -115,7 +120,11 @@ function TVDisplay() {
       chooseOfflineFolder()
       return
     }
-    chooseOfflineFiles()
+    if (action === 'add-files') {
+      chooseOfflineFiles('append')
+      return
+    }
+    chooseOfflineFiles('replace')
   }
 
   function triggerProtectedAction(action: Exclude<ProtectedAction, null>) {
@@ -190,9 +199,11 @@ function TVDisplay() {
       if (unlockTimeoutRef.current) {
         clearTimeout(unlockTimeoutRef.current)
       }
-      offlineFileUrls.forEach(url => URL.revokeObjectURL(url))
+      // Revoke blob URLs only on unmount — never while the playlist is still in use.
+      offlineFileUrlsRef.current.forEach(url => URL.revokeObjectURL(url))
+      offlineFileUrlsRef.current = []
     }
-  }, [offlineFileUrls])
+  }, [])
 
   useEffect(() => {
     if (!folderInputRef.current) return
@@ -293,11 +304,13 @@ function TVDisplay() {
     return () => clearInterval(interval)
   }, [config.enableRotation, config.videoDuration, config.marketDataDuration, config.imageDuration, currentPhase, config.images.length])
 
-  function chooseOfflineFiles() {
+  function chooseOfflineFiles(mode: OfflinePickMode = 'replace') {
+    offlinePickModeRef.current = mode
     fileInputRef.current?.click()
   }
 
   function chooseOfflineFolder() {
+    offlinePickModeRef.current = 'replace'
     folderInputRef.current?.click()
   }
 
@@ -317,58 +330,63 @@ function TVDisplay() {
       })
   }
 
-  function onOfflineFilesSelected(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = filterAndSortVideoFiles(Array.from(e.target.files ?? []))
-    offlineFileUrls.forEach(url => URL.revokeObjectURL(url))
-
+  function applyOfflinePlaylist(files: File[], mode: OfflinePickMode) {
     if (files.length === 0) {
-      if (playbackSource === 'offline' && offlineFileUrls.length === 0) {
+      if (playbackSource === 'offline' && offlineFileUrlsRef.current.length === 0) {
         setOfflineNeedsReselect(true)
       }
       return
     }
 
     const nextUrls = files.map(file => URL.createObjectURL(file))
-    setOfflineFileUrls(nextUrls)
-    setOfflineFileNames(files.map(file => file.name))
-    setCurrentOfflineIndex(0)
+    const nextNames = files.map(file => file.webkitRelativePath || file.name)
+
+    if (mode === 'append' && offlineFileUrlsRef.current.length > 0) {
+      const startIndex = offlineFileUrlsRef.current.length
+      const combinedUrls = [...offlineFileUrlsRef.current, ...nextUrls]
+      offlineFileUrlsRef.current = combinedUrls
+      setOfflineFileUrls(combinedUrls)
+      setOfflineFileNames(prev => [...prev, ...nextNames])
+      // Jump to the first newly queued item so added videos play in succession.
+      setCurrentOfflineIndex(startIndex)
+      setOfflinePlayGeneration(g => g + 1)
+    } else {
+      offlineFileUrlsRef.current.forEach(url => URL.revokeObjectURL(url))
+      offlineFileUrlsRef.current = nextUrls
+      setOfflineFileUrls(nextUrls)
+      setOfflineFileNames(nextNames)
+      setCurrentOfflineIndex(0)
+      setOfflinePlayGeneration(g => g + 1)
+    }
+
     setOfflinePaused(false)
     setPlaybackSource('offline')
     setOfflineNeedsReselect(false)
+    setShowOfflineQueue(true)
+  }
 
-    // Allow selecting the same file again.
+  function onOfflineFilesSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = filterAndSortVideoFiles(Array.from(e.target.files ?? []))
+    const mode = offlinePickModeRef.current
+    applyOfflinePlaylist(files, mode)
+    offlinePickModeRef.current = 'replace'
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   function onOfflineFolderSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const files = filterAndSortVideoFiles(Array.from(e.target.files ?? []))
-    offlineFileUrls.forEach(url => URL.revokeObjectURL(url))
-
-    if (files.length === 0) {
-      if (playbackSource === 'offline' && offlineFileUrls.length === 0) {
-        setOfflineNeedsReselect(true)
-      }
-      if (folderInputRef.current) folderInputRef.current.value = ''
-      return
-    }
-
-    const nextUrls = files.map(file => URL.createObjectURL(file))
-    setOfflineFileUrls(nextUrls)
-    setOfflineFileNames(files.map(file => file.webkitRelativePath || file.name))
-    setCurrentOfflineIndex(0)
-    setOfflinePaused(false)
-    setPlaybackSource('offline')
-    setOfflineNeedsReselect(false)
-
+    applyOfflinePlaylist(files, 'replace')
     if (folderInputRef.current) folderInputRef.current.value = ''
   }
 
   function togglePlaybackSource() {
     if (playbackSource === 'online') {
       setPlaybackSource('offline')
-      if (offlineFileUrls.length === 0) {
+      if (offlineFileUrlsRef.current.length === 0) {
         setOfflineNeedsReselect(true)
-        chooseOfflineFiles()
+        chooseOfflineFiles('replace')
+      } else {
+        setShowOfflineQueue(true)
       }
       return
     }
@@ -377,13 +395,27 @@ function TVDisplay() {
   }
 
   function playNextOffline() {
-    if (offlineFileUrls.length === 0) return
-    setCurrentOfflineIndex(prev => (prev + 1) % offlineFileUrls.length)
+    const urls = offlineFileUrlsRef.current
+    if (urls.length === 0) return
+    setCurrentOfflineIndex(prev => (prev + 1) % urls.length)
+    setOfflinePlayGeneration(g => g + 1)
+    setOfflinePaused(false)
   }
 
   function playPrevOffline() {
-    if (offlineFileUrls.length === 0) return
-    setCurrentOfflineIndex(prev => (prev - 1 + offlineFileUrls.length) % offlineFileUrls.length)
+    const urls = offlineFileUrlsRef.current
+    if (urls.length === 0) return
+    setCurrentOfflineIndex(prev => (prev - 1 + urls.length) % urls.length)
+    setOfflinePlayGeneration(g => g + 1)
+    setOfflinePaused(false)
+  }
+
+  function playOfflineAt(index: number) {
+    const urls = offlineFileUrlsRef.current
+    if (index < 0 || index >= urls.length) return
+    setCurrentOfflineIndex(index)
+    setOfflinePlayGeneration(g => g + 1)
+    setOfflinePaused(false)
   }
 
   function toggleOfflinePause() {
@@ -393,6 +425,7 @@ function TVDisplay() {
   const activeVideoUrl = playbackSource === 'offline'
     ? (offlineFileUrls[currentOfflineIndex] ?? '')
     : undefined
+  const offlinePlaylistCount = offlineFileUrls.length
   const showTopMarketStrip = false
 
   const showOfflineHint = playbackSource === 'offline' && (offlineNeedsReselect || offlineFileUrls.length === 0)
@@ -442,19 +475,41 @@ function TVDisplay() {
             <button
               onClick={() => triggerProtectedAction('choose-files')}
               className="bg-zinc-900/90 hover:bg-zinc-800 text-white px-2 sm:px-3 py-2 rounded shadow-lg transition text-[10px] sm:text-[11px] font-black uppercase tracking-wide flex items-center gap-1"
-              title="Choose local video files"
+              title="Replace offline playlist with selected video files"
             >
               <Upload size={14} />
               <span className="hidden sm:inline">Choose Files</span>
             </button>
+            {offlinePlaylistCount > 0 && (
+              <button
+                onClick={() => triggerProtectedAction('add-files')}
+                className="bg-zinc-900/90 hover:bg-zinc-800 text-white px-2 sm:px-3 py-2 rounded shadow-lg transition text-[10px] sm:text-[11px] font-black uppercase tracking-wide flex items-center gap-1"
+                title="Add more videos to the offline playlist queue"
+              >
+                <Plus size={14} />
+                <span className="hidden sm:inline">Add to Queue</span>
+              </button>
+            )}
             <button
               onClick={() => triggerProtectedAction('choose-folder')}
               className="bg-zinc-900/90 hover:bg-zinc-800 text-white px-2 sm:px-3 py-2 rounded shadow-lg transition text-[10px] sm:text-[11px] font-black uppercase tracking-wide flex items-center gap-1"
-              title="Choose a folder with videos"
+              title="Choose a folder with videos (plays in order)"
             >
               <FolderOpen size={14} />
               <span className="hidden sm:inline">Choose Folder</span>
             </button>
+            {offlinePlaylistCount > 0 && (
+              <button
+                onClick={() => setShowOfflineQueue(v => !v)}
+                className={`px-2 sm:px-3 py-2 rounded shadow-lg transition text-[10px] sm:text-[11px] font-black uppercase tracking-wide flex items-center gap-1 ${
+                  showOfflineQueue ? 'bg-emerald-400 hover:bg-emerald-300 text-black' : 'bg-zinc-900/90 hover:bg-zinc-800 text-white'
+                }`}
+                title="Show offline playlist queue"
+              >
+                <ListMusic size={14} />
+                <span className="hidden sm:inline">Queue {currentOfflineIndex + 1}/{offlinePlaylistCount}</span>
+              </button>
+            )}
           </>
         )}
 
@@ -481,13 +536,57 @@ function TVDisplay() {
       <div className="fixed top-14 left-2 right-2 sm:left-auto sm:right-4 z-50 w-auto sm:w-[320px] bg-zinc-950/95 border border-zinc-700 text-zinc-100 rounded p-3 text-[11px] shadow-xl">
         <p className="font-black uppercase tracking-wide text-amber-300">Offline Source Needed</p>
         <p className="mt-1 text-zinc-300 leading-relaxed">
-          Choose video files or a folder from this machine or USB. This setting affects only this screen.
+          Choose video files or a folder from this machine or USB. Selected videos queue and play in succession like a playlist.
         </p>
         {offlineFileNames.length > 0 && (
           <p className="mt-2 text-zinc-400">
             Last selected: {offlineFileNames.slice(0, 2).join(', ')}{offlineFileNames.length > 2 ? '...' : ''}
           </p>
         )}
+      </div>
+    )
+  }
+
+  function renderOfflineQueue() {
+    if (isFullscreen || playbackSource !== 'offline' || !showOfflineQueue || offlineFileNames.length === 0) return null
+    return (
+      <div className="fixed top-14 left-2 right-2 sm:left-auto sm:right-4 z-50 w-auto sm:w-[340px] max-h-[50vh] bg-zinc-950/95 border border-zinc-700 text-zinc-100 rounded shadow-xl flex flex-col overflow-hidden">
+        <div className="px-3 py-2 border-b border-zinc-800 flex items-center justify-between gap-2">
+          <div>
+            <p className="font-black uppercase tracking-wide text-[10px] text-amber-300">Offline Playlist</p>
+            <p className="text-[10px] text-zinc-400 mt-0.5">
+              Playing {currentOfflineIndex + 1} of {offlinePlaylistCount} — auto-advances when a video ends
+            </p>
+          </div>
+          <button
+            onClick={() => setShowOfflineQueue(false)}
+            className="text-[10px] font-black uppercase tracking-wide text-zinc-500 hover:text-white"
+          >
+            Hide
+          </button>
+        </div>
+        <ul className="overflow-y-auto custom-scrollbar divide-y divide-zinc-800/80">
+          {offlineFileNames.map((name, idx) => {
+            const isCurrent = idx === currentOfflineIndex
+            return (
+              <li key={`${idx}-${name}`}>
+                <button
+                  type="button"
+                  onClick={() => playOfflineAt(idx)}
+                  className={`w-full text-left px-3 py-2 text-[11px] transition flex items-start gap-2 ${
+                    isCurrent
+                      ? 'bg-[#ffaa00]/15 text-[#ffaa00]'
+                      : 'text-zinc-300 hover:bg-zinc-900 hover:text-white'
+                  }`}
+                  title={name}
+                >
+                  <span className="font-black text-[10px] tabular-nums opacity-70 w-5 shrink-0">{idx + 1}</span>
+                  <span className="truncate leading-snug">{name.split(/[/\\]/).pop() || name}</span>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
       </div>
     )
   }
@@ -718,6 +817,7 @@ function TVDisplay() {
 
         {!isFullscreen && renderDisplayControls()}
         {!isFullscreen && renderOfflineHint()}
+        {!isFullscreen && renderOfflineQueue()}
         {!isFullscreen && renderPinDialog()}
         
         {/* Optional top market strip */}
@@ -733,13 +833,14 @@ function TVDisplay() {
             <VideoPlayer
               height="100%"
               url={activeVideoUrl}
+              mediaKey={playbackSource === 'offline' ? offlinePlayGeneration : undefined}
               localOnly={playbackSource === 'offline'}
               paused={playbackSource === 'offline' ? offlinePaused : undefined}
               onTogglePause={playbackSource === 'offline' ? toggleOfflinePause : undefined}
               onPrev={playbackSource === 'offline' ? playPrevOffline : undefined}
               onNext={playbackSource === 'offline' ? playNextOffline : undefined}
-              onEnded={playNextOffline}
-              onError={playNextOffline}
+              onEnded={playbackSource === 'offline' ? playNextOffline : undefined}
+              onError={playbackSource === 'offline' ? playNextOffline : undefined}
             />
           </main>
 
@@ -784,6 +885,7 @@ function TVDisplay() {
         />
         {!isFullscreen && renderDisplayControls()}
         {!isFullscreen && renderOfflineHint()}
+        {!isFullscreen && renderOfflineQueue()}
         {!isFullscreen && renderPinDialog()}
         <MarketDataTable
           commodities={commodities}
@@ -819,6 +921,7 @@ function TVDisplay() {
         />
         {!isFullscreen && renderDisplayControls()}
         {!isFullscreen && renderOfflineHint()}
+        {!isFullscreen && renderOfflineQueue()}
         {!isFullscreen && renderPinDialog()}
         {showTopMarketStrip && (
           <div className="order-2 md:order-none h-[17vh] sm:h-[20vh] lg:h-[22vh] overflow-hidden">
@@ -875,6 +978,7 @@ function TVDisplay() {
       />
       {!isFullscreen && renderDisplayControls()}
       {!isFullscreen && renderOfflineHint()}
+      {!isFullscreen && renderOfflineQueue()}
       {!isFullscreen && renderPinDialog()}
       {showTopMarketStrip && (
         <div className="order-2 md:order-none h-[17vh] sm:h-[20vh] lg:h-[22vh] overflow-hidden">
@@ -886,13 +990,14 @@ function TVDisplay() {
           <VideoPlayer
             height="100%"
             url={activeVideoUrl}
+            mediaKey={playbackSource === 'offline' ? offlinePlayGeneration : undefined}
             localOnly={playbackSource === 'offline'}
             paused={playbackSource === 'offline' ? offlinePaused : undefined}
             onTogglePause={playbackSource === 'offline' ? toggleOfflinePause : undefined}
             onPrev={playbackSource === 'offline' ? playPrevOffline : undefined}
             onNext={playbackSource === 'offline' ? playNextOffline : undefined}
-            onEnded={playNextOffline}
-            onError={playNextOffline}
+            onEnded={playbackSource === 'offline' ? playNextOffline : undefined}
+            onError={playbackSource === 'offline' ? playNextOffline : undefined}
           />
         </main>
         <div className="block md:block md:flex-[1.5] md:min-w-[400px] min-w-0 max-h-[30vh] sm:max-h-[32vh] md:max-h-none overflow-hidden">
